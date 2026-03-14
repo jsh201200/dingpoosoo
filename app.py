@@ -25,45 +25,21 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-DEFAULT_STYLE_GUIDE = """당신은 '2D 스틱맨 애니메이션 전문 프롬프트 디렉터'입니다.
+DEFAULT_STYLE_GUIDE = """In the distinctive hand-drawn, loose ink-and-wash style of Quentin Blake, reminiscent of the aesthetic in vintage children's book illustrations.
+The scene features loose, expressive, dynamic scribbled ink line work. The coloring is a minimal, flat, transparent watercolor wash palette. The composition is isolated on a pure, clean white background, with only essential grounding details (like minimal floor scratches or soft shadows).
+Colors are limited to soft, muted tones (e.g., washed-out blues, pale greens, ochre, soft reds) applied loosely over the ink lines.
+- NO text, NO letters, NO words anywhere in image
+- NO 3D, NO photoreal, NO digital art style
+- Expressive character poses and emotions through body language and facial lines
+- Minimal background, focus on character action"""
 
-🎨 스타일 가이드 (Style Lock)
-1. 비주얼 정의 (Visuals)
- 캐릭터: Pure-white round faces, single hard cel shading(턱 아래 1단 그림자), thick black outline, thicker torso and neck, stick limbs, flat matte colors.
- 배경: 저채도 평면 블록(Low saturation flat blocks), 글자 절대 금지.
- 네거티브(내재): 3D, photoreal, gradient, soft light, text, letters, speech bubble.
-
-2. 장면 해석 (Scene Interpretation)
- 행동 중심: 감정은 눈썹/입선으로, 동작은 명확한 동사(leans, points, nods, clasps, gestures)로 표현.
- 경제 개념 시각화: 추상적 개념은 인물+아이콘/도형으로 변환.
-     상승/하락 → 화살표 아이콘(Arrow icons)
-     데이터/실적 → 차트 도형, 기어, 지도 핀
-     계약/문서 → 빈 종이 아이콘
-     주의: 모든 간판, 화면, 문서에 글자(Text) 대신 기호/도형만 사용.
-
-📝 출력 템플릿 (Output Template)
-모든 프롬프트는 반드시 아래 문장으로 시작해야 합니다:
-Upgraded stick-man 2D with thick black outline, pure white faces, single hard cel shading, thicker torso and neck, flat matte colors; SCENE: [행동 및 아이콘 묘사 (영문) + no text/letters 강조]"""
-
-DEFAULT_FORMAT_PROMPT = "Upgraded stick-man 2D with thick black outline, pure white faces, single hard cel shading, thicker torso and neck, flat matte colors; SCENE: [장면 묘사], no text or letters."
+DEFAULT_FORMAT_PROMPT = """In the distinctive hand-drawn, loose ink-and-wash style of Quentin Blake, vintage children's book illustration; loose expressive scribbled ink lines, minimal transparent watercolor wash, pure white background, soft muted tones (washed blues, pale greens, ochre, soft reds); SCENE: {scene_description}; no text, no letters."""
 
 LANGUAGE_SETTINGS = {
-    "언어 없음": {
-        "instruction": "Do NOT include any text, letters, numbers, or words in the image.",
-        "negative": "no text, no letters, no words, no numbers, no writing",
-    },
-    "한국어": {
-        "instruction": "You may include Korean text (한국어) in the image where appropriate. Keep text minimal.",
-        "negative": "no English text, no Japanese text",
-    },
-    "일본어": {
-        "instruction": "You may include Japanese text (日本語) in the image where appropriate. Keep text minimal.",
-        "negative": "no English text, no Korean text",
-    },
-    "영어": {
-        "instruction": "You may include English text in the image where appropriate. Keep text minimal.",
-        "negative": "no Korean text, no Japanese text",
-    },
+    "언어 없음": "absolutely no text, no letters, no words, no numbers, no writing of any kind in the image",
+    "한국어": "Korean text only allowed on signs or labels if necessary, minimal",
+    "일본어": "Japanese text only allowed on signs or labels if necessary, minimal",
+    "영어": "English text only allowed on signs or labels if necessary, minimal",
 }
 
 def chars_per_second(seconds):
@@ -72,7 +48,8 @@ def chars_per_second(seconds):
 def split_script(script, seconds_per_cut):
     target = chars_per_second(seconds_per_cut)
     script = re.sub(r'\s+', ' ', script.strip())
-    sentences = re.split(r'(?<=[.!?。])\s*', script)
+    # 문장 단위로 먼저 분리 (마침표, 느낌표, 물음표, 줄바꿈 기준)
+    sentences = re.split(r'(?<=[.!?。\n])\s*', script)
     cuts, current = [], ""
     for sent in sentences:
         sent = sent.strip()
@@ -80,16 +57,17 @@ def split_script(script, seconds_per_cut):
             continue
         if not current:
             current = sent
-        elif len(current) + len(sent) + 1 <= target * 1.4:
+        elif len(current) + len(sent) + 1 <= target * 1.3:
             current += " " + sent
         else:
             cuts.append(current.strip())
             current = sent
     if current:
         cuts.append(current.strip())
+    # 너무 긴 컷 강제 분할
     final_cuts = []
     for cut in cuts:
-        while len(cut) > target * 1.6:
+        while len(cut) > target * 1.5:
             final_cuts.append(cut[:target])
             cut = cut[target:]
         if cut:
@@ -97,38 +75,61 @@ def split_script(script, seconds_per_cut):
     return [c for c in final_cuts if c]
 
 def build_image_prompt(client, cut_text, style_guide, format_prompt, language, cut_index, total_cuts):
-    lang_cfg = LANGUAGE_SETTINGS[language]
-    system = f"""당신은 2D 스틱맨 애니메이션 전문 이미지 프롬프트 작가입니다.
-아래 스타일 가이드를 엄격히 따르세요:
+    """
+    Gemini 2.5 Flash로 대본 내용 → 영문 이미지 프롬프트 생성
+    대본의 구체적인 행동/장면이 반드시 반영되도록 강하게 지시
+    """
+    lang_note = LANGUAGE_SETTINGS[language]
 
+    system_instruction = f"""You are an expert image prompt writer specializing in 2D stick-man animation scenes.
+
+YOUR ONLY JOB: Convert the given Korean script segment into ONE precise English image generation prompt.
+
+MANDATORY RULES:
+1. The prompt MUST specifically describe what is HAPPENING in the script — the exact action, emotion, or concept from the text
+2. Always start with the style prefix: "Upgraded stick-man 2D with thick black outline, pure white round faces, single hard cel shading, thicker torso, stick limbs, flat matte colors; SCENE:"
+3. After "SCENE:" describe the SPECIFIC action/scene from the script in vivid visual terms
+4. Use concrete visual verbs: holds, points, gestures, leans, raises, clasps, runs, falls, celebrates, etc.
+5. For abstract concepts: use icons (arrow↑ for growth, chart shape for data, coin icon for money, etc.)
+6. End with: "{lang_note}"
+7. Output ONLY the prompt — no explanation, no quotes, no numbering
+
+STYLE REFERENCE:
 {style_guide}
 
-언어 지침: {lang_cfg['instruction']}
-네거티브: {lang_cfg['negative']}
+EXAMPLE:
+Script: "주식 시장이 폭락할 때 오히려 매수 버튼을 누르죠"
+Output: In the distinctive hand-drawn, loose ink-and-wash style of Quentin Blake, vintage children's book illustration; loose expressive scribbled ink lines, minimal transparent watercolor wash, pure white background, soft muted tones; SCENE: a confident man pressing a large button with a bold decisive gesture while chaotic figures around him panic and flail, expressive dynamic poses, ochre and pale blue wash; {lang_note}"""
 
-출력 형식:
-- 반드시 영어로만 작성하세요.
-- 프롬프트는 한 줄로 출력하세요. 설명, 번호, 따옴표 불필요.
-- 프롬프트 형식: {format_prompt}"""
+    user_msg = f"""Convert this Korean script segment (cut {cut_index} of {total_cuts}) into an image prompt.
+
+SCRIPT SEGMENT:
+"{cut_text}"
+
+Write ONE English image prompt that SPECIFICALLY shows what this script is about. The visual must clearly represent the content of this script."""
 
     response = client.models.generate_content(
         model="gemini-2.5-flash",
-        contents=f'컷 {cut_index}/{total_cuts}: 아래 대본 내용을 시각적으로 표현하는 이미지 프롬프트를 작성하세요.\n\n대본 내용:\n"{cut_text}"\n\n위 내용을 스틱맨 스타일로 표현하는 한 줄 영문 이미지 프롬프트를 작성하세요.',
+        contents=user_msg,
         config=types.GenerateContentConfig(
-            system_instruction=system,
-            temperature=0.7,
-            max_output_tokens=300,
+            system_instruction=system_instruction,
+            temperature=0.6,
+            max_output_tokens=400,
         )
     )
-    return response.text.strip().strip('"').strip("'")
+    raw = response.text.strip().strip('"').strip("'")
+    
+    # 스타일 prefix가 빠진 경우 보완
+    if not raw.lower().startswith("in the distinctive"):
+        raw = f"In the distinctive hand-drawn, loose ink-and-wash style of Quentin Blake, vintage children's book illustration; loose expressive scribbled ink lines, minimal transparent watercolor wash, pure white background, soft muted tones; SCENE: {raw}; {lang_note}"
+    
+    return raw
 
 def generate_image(client, prompt, language):
-    """
-    나노바나나2: gemini-3.1-flash-image-preview
-    generate_content + response_modalities=["TEXT","IMAGE"] 방식
-    """
-    lang_cfg = LANGUAGE_SETTINGS[language]
-    full_prompt = f"{prompt}, {lang_cfg['negative']}"
+    """이미지 생성"""
+    lang_note = LANGUAGE_SETTINGS[language]
+    # 언어 지시와 스타일 강화를 프롬프트 끝에 추가
+    full_prompt = f"{prompt}\n\nSTRICT REQUIREMENTS: Draw exactly what is described above. {lang_note}. Stick-man style ONLY."
 
     response = client.models.generate_content(
         model="gemini-3.1-flash-image-preview",
@@ -140,7 +141,6 @@ def generate_image(client, prompt, language):
 
     for part in response.candidates[0].content.parts:
         if part.inline_data and part.inline_data.mime_type.startswith("image/"):
-            # inline_data.data 는 bytes 또는 base64 str — 둘 다 처리
             data = part.inline_data.data
             if isinstance(data, str):
                 data = base64.b64decode(data)
@@ -166,16 +166,16 @@ with st.sidebar:
     st.caption(f"컷당 약 **{chars_per_second(seconds_per_cut)}글자** 기준으로 분할됩니다.")
     st.divider()
 
-    st.markdown("### 🌐 이미지 텍스트 언어")
-    language = st.radio("이미지에 표시할 언어", options=["언어 없음","한국어","일본어","영어"], index=0)
+    st.markdown("### 🌐 이미지 언어")
+    language = st.radio("이미지 내 텍스트 언어", options=["언어 없음","한국어","일본어","영어"], index=0)
     st.divider()
 
-    st.markdown("### 🎨 이미지 스타일 가이드")
-    style_guide = st.text_area("스타일 가이드 (편집 가능)", value=DEFAULT_STYLE_GUIDE, height=220)
+    st.markdown("### 🎨 스타일 가이드")
+    style_guide = st.text_area("스타일 가이드 (편집 가능)", value=DEFAULT_STYLE_GUIDE, height=200)
     st.divider()
 
     st.markdown("### 📋 프롬프트 형식 (선택)")
-    format_prompt = st.text_area("커스텀 형식 (비워두면 기본값 사용)", placeholder="예: A 2D stickman scene...", height=80)
+    format_prompt = st.text_area("커스텀 형식 (비워두면 기본값)", placeholder="비워두면 기본 스틱맨 형식 사용", height=80)
     if not format_prompt.strip():
         format_prompt = DEFAULT_FORMAT_PROMPT
 
@@ -183,8 +183,11 @@ with st.sidebar:
 st.markdown('<div class="main-header">🎬 스틱맨 이미지 생성기</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">Powered by Gemini 2.5 Flash + Nano Banana 2 🍌</div>', unsafe_allow_html=True)
 
-script = st.text_area("📝 대본 입력", height=160,
-    placeholder="여기에 대본을 붙여넣으세요...\n\n예) 부자들은 위기를 기회로 삼습니다. 주식 시장이 폭락할 때 오히려 매수 버튼을 누르죠.")
+script = st.text_area(
+    "📝 대본 입력",
+    height=160,
+    placeholder="여기에 대본을 붙여넣으세요...\n\n예) 부자들은 위기를 기회로 삼습니다.\n주식 시장이 폭락할 때 오히려 매수 버튼을 누르죠.",
+)
 
 col_btn1, col_btn2 = st.columns([3,1])
 with col_btn1:
@@ -228,54 +231,66 @@ if start_btn:
 
     client = genai.Client(api_key=api_key)
 
-    # STEP 1
-    with st.status("**1단계: 대본 분석 중...**", expanded=True) as status_1:
+    # ── STEP 1: 대본 분석 ──────────────────────────────────────
+    with st.status("**1단계: 대본 분석 중...**", expanded=True) as s1:
         try:
             r = client.models.generate_content(
                 model="gemini-2.5-flash",
-                contents=f"아래 대본을 분석하고, 다음 항목을 간단하게 요약해주세요 (한국어):\n1. 주제 (한 줄)\n2. 전달 메시지 (핵심)\n3. 주요 등장 개념/인물\n\n대본:\n{script}",
-                config=types.GenerateContentConfig(max_output_tokens=300, temperature=0.3)
+                contents=f"""아래 대본을 분석하고 한국어로 요약해주세요:
+1. 전체 주제 (한 줄)
+2. 핵심 메시지
+3. 주요 장면/행동 키워드 (시각화에 중요한 것들)
+
+대본:
+{script}""",
+                config=types.GenerateContentConfig(max_output_tokens=400, temperature=0.3)
             )
             st.session_state.analysis = r.text.strip()
             st.session_state.step = 1
             st.markdown(st.session_state.analysis)
-            status_1.update(label="✅ 1단계: 대본 분석 완료", state="complete")
+            s1.update(label="✅ 1단계: 대본 분석 완료", state="complete")
         except Exception as e:
-            status_1.update(label=f"❌ 대본 분석 실패: {e}", state="error")
+            s1.update(label=f"❌ 대본 분석 실패: {e}", state="error")
             st.stop()
 
-    # STEP 2
-    with st.status("**2단계: 초단위 분할 중...**", expanded=True) as status_2:
+    # ── STEP 2: 초단위 분할 ────────────────────────────────────
+    with st.status("**2단계: 초단위 분할 중...**", expanded=True) as s2:
         cuts = split_script(script, seconds_per_cut)
         st.session_state.cuts = cuts
         st.session_state.step = 2
-        st.write(f"📌 총 **{len(cuts)}개** 컷 (컷당 {seconds_per_cut}초, 약 {chars_per_second(seconds_per_cut)}글자 기준)")
+        st.write(f"📌 총 **{len(cuts)}개** 컷 (컷당 {seconds_per_cut}초 / 약 {chars_per_second(seconds_per_cut)}글자 기준)")
         for i, cut in enumerate(cuts):
-            st.markdown(f"**컷 {i+1}** ({len(cut)}글자): {cut}")
-        status_2.update(label=f"✅ 2단계: {len(cuts)}개 컷으로 분할 완료", state="complete")
+            st.markdown(f"**컷 {i+1}** `{len(cut)}자` — {cut}")
+        s2.update(label=f"✅ 2단계: {len(cuts)}개 컷으로 분할 완료", state="complete")
 
-    # STEP 3
+    # ── STEP 3: 프롬프트 생성 ──────────────────────────────────
     prompts = []
-    with st.status("**3단계: 이미지 프롬프트 생성 중...**", expanded=True) as status_3:
+    with st.status("**3단계: 대본 → 이미지 프롬프트 변환 중...**", expanded=True) as s3:
         prog3 = st.progress(0)
         for i, cut in enumerate(cuts):
-            st.write(f"🖊 컷 {i+1}/{len(cuts)} 프롬프트 생성 중...")
+            st.write(f"🖊 컷 {i+1}/{len(cuts)}: `{cut[:30]}...` → 프롬프트 생성 중")
             try:
-                p = build_image_prompt(client, cut, style_guide, format_prompt, language, i+1, len(cuts))
+                p = build_image_prompt(
+                    client, cut, style_guide, format_prompt, language, i+1, len(cuts)
+                )
                 prompts.append(p)
-                st.caption(f"→ {p[:120]}{'...' if len(p)>120 else ''}")
+                # 프롬프트 미리보기 (SCENE: 이후만 보여줌)
+                scene_part = p.split("SCENE:")[-1][:100] if "SCENE:" in p else p[:100]
+                st.caption(f"→ SCENE: {scene_part}...")
             except Exception as e:
-                prompts.append(f"{DEFAULT_FORMAT_PROMPT} Scene: {cut[:80]}")
+                fallback = f"In the distinctive hand-drawn, loose ink-and-wash style of Quentin Blake, vintage children's book illustration; loose expressive scribbled ink lines, minimal transparent watercolor wash, pure white background, soft muted tones; SCENE: expressive characters in a scene related to: {cut[:60]}; no text"
+                prompts.append(fallback)
                 st.session_state.errors.append(f"컷 {i+1} 프롬프트 오류: {e}")
             prog3.progress((i+1)/len(cuts))
-            time.sleep(0.3)
+            time.sleep(0.4)
+
         st.session_state.prompts = prompts
         st.session_state.step = 3
-        status_3.update(label=f"✅ 3단계: {len(prompts)}개 프롬프트 생성 완료", state="complete")
+        s3.update(label=f"✅ 3단계: {len(prompts)}개 프롬프트 생성 완료", state="complete")
 
-    # STEP 4
+    # ── STEP 4: 이미지 생성 ────────────────────────────────────
     images = [None]*len(cuts)
-    with st.status("**4단계: 이미지 생성 중 (Nano Banana 2 🍌)...**", expanded=True) as status_4:
+    with st.status("**4단계: 이미지 생성 중 🍌...**", expanded=True) as s4:
         prog4 = st.progress(0)
         img_ph = st.empty()
         for i, (cut, prompt) in enumerate(zip(cuts, prompts)):
@@ -284,32 +299,34 @@ if start_btn:
                 img = generate_image(client, prompt, language)
                 images[i] = img
                 if img:
-                    img_ph.image(img, caption=f"컷 {i+1} 미리보기", width=300)
+                    img_ph.image(img, caption=f"컷 {i+1}: {cut[:30]}...", width=320)
             except Exception as e:
                 st.session_state.errors.append(f"컷 {i+1} 이미지 오류: {e}")
-                st.warning(f"⚠️ 컷 {i+1} 생성 실패: {e}")
+                st.warning(f"⚠️ 컷 {i+1} 실패: {e}")
             prog4.progress((i+1)/len(cuts))
             time.sleep(0.5)
+
         img_ph.empty()
         st.session_state.images = images
         st.session_state.step = 4
         ok = sum(1 for img in images if img is not None)
-        status_4.update(label=f"✅ 4단계: {ok}/{len(cuts)}개 이미지 생성 완료", state="complete")
+        s4.update(label=f"✅ 4단계: {ok}/{len(cuts)}개 이미지 생성 완료", state="complete")
 
     st.rerun()
 
-# 결과 출력
+# ── 결과 출력 ──────────────────────────────────────────────────
 if st.session_state.step == 4 and st.session_state.cuts:
     st.markdown("---")
     st.markdown("## 🎉 생성 결과")
+
     if st.session_state.errors:
         with st.expander(f"⚠️ 오류 {len(st.session_state.errors)}건"):
             for err in st.session_state.errors:
                 st.caption(err)
 
-    cuts = st.session_state.cuts
+    cuts   = st.session_state.cuts
     prompts = st.session_state.prompts
-    images = st.session_state.images
+    images  = st.session_state.images
 
     for row_start in range(0, len(cuts), 3):
         row_items = list(enumerate(cuts[row_start:row_start+3], start=row_start))
@@ -321,12 +338,16 @@ if st.session_state.step == 4 and st.session_state.cuts:
                     st.image(images[i], use_container_width=True)
                     buf = io.BytesIO()
                     images[i].save(buf, format="PNG")
-                    st.download_button(f"💾 컷{i+1} 저장", buf.getvalue(), f"cut_{i+1:02d}.png", "image/png", key=f"dl_{i}")
+                    st.download_button(
+                        f"💾 컷{i+1} 저장", buf.getvalue(),
+                        f"cut_{i+1:02d}.png", "image/png", key=f"dl_{i}"
+                    )
                 else:
-                    st.warning("이미지 생성 실패")
-                st.caption(f"📝 {cut}")
+                    st.warning("생성 실패")
+                # 대본 내용 + 프롬프트 둘 다 보여줌
+                st.caption(f"📝 대본: {cut}")
                 if i < len(prompts):
-                    with st.expander("프롬프트 보기"):
+                    with st.expander("🔍 생성된 프롬프트 보기"):
                         st.code(prompts[i], language="text")
 
     if any(img is not None for img in images):
@@ -339,20 +360,26 @@ if st.session_state.step == 4 and st.session_state.cuts:
                     img.save(b, format="PNG")
                     zf.writestr(f"cut_{i+1:02d}.png", b.getvalue())
         st.markdown("---")
-        st.download_button("📦 전체 이미지 ZIP 다운로드", zip_buf.getvalue(), "stickman_cuts.zip", "application/zip", type="primary")
+        st.download_button(
+            "📦 전체 이미지 ZIP 다운로드",
+            zip_buf.getvalue(), "stickman_cuts.zip",
+            "application/zip", type="primary"
+        )
 
 if st.session_state.step == 0:
     st.markdown("---")
-    st.info("👈 사이드바에서 설정을 완료한 뒤, 대본을 입력하고 **🚀 이미지 생성 시작** 버튼을 눌러주세요.")
-    with st.expander("📌 사용 방법"):
+    st.info("👈 사이드바에서 설정 후, 대본을 입력하고 **🚀 이미지 생성 시작**을 눌러주세요.")
+    with st.expander("📌 동작 방식"):
         st.markdown("""
-1. 사이드바에 **Gemini API 키** 입력
-2. **컷당 시간** 설정 (5초 ~ 30초, 5초 단위)
-3. **이미지 언어** 선택 (언어 없음 / 한국어 / 일본어 / 영어)
-4. 스타일 가이드 / 프롬프트 형식 필요 시 수정
-5. 대본 입력 후 **이미지 생성 시작** 클릭
+**4단계 자동 파이프라인:**
 
-**모델 정보:**
-- 🧠 대본 분석 / 프롬프트 생성: `gemini-2.5-flash`
+1. **대본 분석** — Gemini가 전체 주제와 핵심 장면 키워드 파악
+2. **초단위 분할** — 컷당 시간 기준(한국어 4.5자/초)으로 대본을 컷별로 나눔
+3. **프롬프트 생성** — 각 컷의 내용을 스틱맨 스타일 영문 이미지 프롬프트로 변환
+   - 대본 내용이 구체적으로 반영됨 (행동, 감정, 개념 → 시각적 묘사)
+4. **이미지 생성** — 생성된 프롬프트로 실제 이미지 생성
+
+**모델:**
+- 🧠 프롬프트 생성: `gemini-2.5-flash`
 - 🎨 이미지 생성: `gemini-3.1-flash-image-preview` (Nano Banana 2 🍌)
         """)
