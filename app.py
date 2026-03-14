@@ -124,11 +124,8 @@ def generate_image(prompt, language):
     full_prompt = f"{prompt}, {lang_cfg['negative']}"
     model = genai.GenerativeModel("gemini-2.0-flash-preview-image-generation")
     response = model.generate_content(
-        full_prompt,
-        generation_config=genai.GenerationConfig(
-            response_modalities=["IMAGE", "TEXT"],
-            temperature=1.0,
-        )
+        contents=full_prompt,
+        generation_config={"response_modalities": ["IMAGE", "TEXT"]},
     )
     for part in response.candidates[0].content.parts:
         if hasattr(part, 'inline_data') and part.inline_data and part.inline_data.mime_type.startswith("image/"):
