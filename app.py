@@ -45,10 +45,61 @@ LANGUAGE_SETTINGS = {
 def chars_per_second(seconds):
     return round(seconds * 4.5)
 
-def split_script(script, seconds_per_cut):
+def split_script_semantic(client, script, seconds_per_cut):
+    """
+    Gemini가 문장 의미 단위로 대본을 분할
+    글자 수 기준이 아니라 내용/호흡/의미 흐름 기준
+    """
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=f"""아래 대본을 이미지 한 컷에 어울리는 의미 단위로 분할해주세요.
+
+분할 기준:
+- 한 컷 = 약 {seconds_per_cut}초 분량 (한국어 기준 약 {chars_per_second(seconds_per_cut)}글자)
+- 글자 수보다 **의미와 호흡**을 우선: 하나의 생각/장면/감정이 완결되는 지점에서 자르기
+- 문장 중간에서 자르지 말 것
+- 너무 짧은 컷(10글자 미만)은 앞뒤와 합치기
+- 번호와 내용만 출력 (설명 없이)
+
+출력 형식 (반드시 이 형식 준수):
+1. [컷 내용]
+2. [컷 내용]
+3. [컷 내용]
+...
+
+대본:
+{script}""",
+        config=types.GenerateContentConfig(
+            temperature=0.3,
+            max_output_tokens=1000,
+        )
+    )
+
+    raw = response.text.strip()
+    cuts = []
+    for line in raw.split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        # "1. 내용" 또는 "1) 내용" 패턴 파싱
+        match = re.match(r'^\d+[\.\)]\s*(.+)', line)
+        if match:
+            cut = match.group(1).strip()
+            if cut:
+                cuts.append(cut)
+
+    # 파싱 실패 시 글자 수 기준으로 fallback
+    if len(cuts) == 0:
+        st.warning("의미 분할 실패 — 글자 수 기준으로 대체합니다.")
+        cuts = split_script_fallback(script, seconds_per_cut)
+
+    return cuts
+
+
+def split_script_fallback(script, seconds_per_cut):
+    """글자 수 기준 분할 (백업용)"""
     target = chars_per_second(seconds_per_cut)
     script = re.sub(r'\s+', ' ', script.strip())
-    # 문장 단위로 먼저 분리 (마침표, 느낌표, 물음표, 줄바꿈 기준)
     sentences = re.split(r'(?<=[.!?。\n])\s*', script)
     cuts, current = [], ""
     for sent in sentences:
@@ -64,7 +115,6 @@ def split_script(script, seconds_per_cut):
             current = sent
     if current:
         cuts.append(current.strip())
-    # 너무 긴 컷 강제 분할
     final_cuts = []
     for cut in cuts:
         while len(cut) > target * 1.5:
@@ -169,7 +219,7 @@ with st.sidebar:
 
     st.markdown("### ⏱ 컷당 시간")
     seconds_per_cut = st.select_slider("초 선택", options=[5,10,15,20,25,30], value=10)
-    st.caption(f"컷당 약 **{chars_per_second(seconds_per_cut)}글자** 기준으로 분할됩니다.")
+    st.caption(f"컷당 목표 **{seconds_per_cut}초** 기준으로 의미 단위 분할합니다.")
     st.divider()
 
     st.markdown("### 🌐 이미지 언어")
@@ -259,12 +309,12 @@ if start_btn:
             s1.update(label=f"❌ 대본 분석 실패: {e}", state="error")
             st.stop()
 
-    # ── STEP 2: 초단위 분할 ────────────────────────────────────
-    with st.status("**2단계: 초단위 분할 중...**", expanded=True) as s2:
-        cuts = split_script(script, seconds_per_cut)
+    # ── STEP 2: 의미 단위 분할 ─────────────────────────────────
+    with st.status("**2단계: 의미 단위 분할 중...**", expanded=True) as s2:
+        cuts = split_script_semantic(client, script, seconds_per_cut)
         st.session_state.cuts = cuts
         st.session_state.step = 2
-        st.write(f"📌 총 **{len(cuts)}개** 컷 (컷당 {seconds_per_cut}초 / 약 {chars_per_second(seconds_per_cut)}글자 기준)")
+        st.write(f"📌 총 **{len(cuts)}개** 컷 (컷당 목표 {seconds_per_cut}초 / 의미 단위 기준)")
         for i, cut in enumerate(cuts):
             st.markdown(f"**컷 {i+1}** `{len(cut)}자` — {cut}")
         s2.update(label=f"✅ 2단계: {len(cuts)}개 컷으로 분할 완료", state="complete")
@@ -379,11 +429,177 @@ if st.session_state.step == 4 and st.session_state.cuts:
                     img.save(b, format="PNG")
                     zf.writestr(f"cut_{i+1:02d}.png", b.getvalue())
         st.markdown("---")
-        st.download_button(
-            "📦 전체 이미지 ZIP 다운로드",
-            zip_buf.getvalue(), "stickman_cuts.zip",
-            "application/zip", type="primary"
-        )
+
+        col_zip, col_save = st.columns([1, 1])
+        with col_zip:
+            st.download_button(
+                "📦 전체 이미지 ZIP 다운로드",
+                zip_buf.getvalue(), "stickman_cuts.zip",
+                "application/zip", type="primary"
+            )
+        with col_save:
+            # 라이브러리에 저장할 데이터 준비 (이미지는 base64로 직렬화)
+            import base64 as b64mod, json, datetime
+            save_title = st.text_input("저장 제목", value=script[:20].strip() + "...", key="save_title")
+            if st.button("📚 라이브러리에 저장", type="secondary"):
+                items = []
+                for i, (cut, img) in enumerate(zip(cuts, images)):
+                    img_b64 = ""
+                    if img is not None:
+                        buf2 = io.BytesIO()
+                        img.save(buf2, format="PNG")
+                        img_b64 = b64mod.b64encode(buf2.getvalue()).decode()
+                    items.append({"cut": cut, "img": img_b64, "scene": scenes[i] if i < len(scenes) else ""})
+
+                entry = {
+                    "id": str(int(datetime.datetime.now().timestamp() * 1000)),
+                    "title": save_title,
+                    "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "expire": (datetime.datetime.now() + datetime.timedelta(days=2)).timestamp(),
+                    "items": items,
+                }
+                # JS로 localStorage에 저장
+                entry_json = json.dumps(entry, ensure_ascii=False)
+                st.components.v1.html(f"""
+<script>
+(function() {{
+    var key = 'imggen_library';
+    var existing = JSON.parse(localStorage.getItem(key) || '[]');
+    // 만료된 항목 제거
+    var now = Date.now() / 1000;
+    existing = existing.filter(function(e) {{ return e.expire > now; }});
+    existing.unshift({entry_json});
+    localStorage.setItem(key, JSON.stringify(existing));
+    // 저장 완료 알림
+    var msg = document.createElement('div');
+    msg.style.cssText = 'background:#d4edda;color:#155724;padding:12px 18px;border-radius:8px;font-weight:600;font-size:14px;';
+    msg.textContent = '✅ 라이브러리에 저장됐습니다! (48시간 후 자동 삭제)';
+    document.body.appendChild(msg);
+    setTimeout(function() {{ msg.remove(); }}, 3000);
+}})();
+</script>
+""", height=50)
+                st.success("✅ 라이브러리에 저장됐습니다! 아래 📚 라이브러리 탭에서 확인하세요.")
+
+# ── 라이브러리 ──────────────────────────────────────────────────
+st.markdown("---")
+st.markdown("## 📚 라이브러리")
+st.caption("저장된 작업물이 여기 표시됩니다. 48시간 후 자동 삭제됩니다.")
+
+# localStorage에서 라이브러리 불러오기 + 표시
+import streamlit.components.v1 as components
+import json
+
+# JS → Python 통신: localStorage 데이터를 query param으로 넘기는 방식
+library_html = """
+<style>
+  body { font-family: sans-serif; margin: 0; background: transparent; }
+  .lib-empty { color: #999; font-size: 13px; padding: 8px 0; }
+  .lib-item {
+    border: 1px solid #e0e0e0; border-radius: 10px;
+    padding: 12px 16px; margin-bottom: 10px;
+    background: #fafafa; cursor: pointer;
+  }
+  .lib-item:hover { background: #f0f4ff; border-color: #aac; }
+  .lib-title { font-weight: 600; font-size: 14px; color: #333; }
+  .lib-meta  { font-size: 12px; color: #888; margin-top: 2px; }
+  .lib-del   { float: right; background: none; border: none;
+               color: #cc4444; cursor: pointer; font-size: 13px; }
+  .lib-imgs  { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .lib-imgs img { width: 90px; height: 90px; object-fit: cover;
+                  border-radius: 6px; border: 1px solid #ddd; }
+  .lib-cut   { font-size: 11px; color: #555; text-align: center;
+               width: 90px; overflow: hidden; white-space: nowrap;
+               text-overflow: ellipsis; }
+  .expanded  { background: #f0f4ff !important; }
+</style>
+
+<div id="library"></div>
+
+<script>
+(function() {
+  var key = 'imggen_library';
+  var container = document.getElementById('library');
+
+  function render() {
+    var raw = localStorage.getItem(key) || '[]';
+    var items;
+    try { items = JSON.parse(raw); } catch(e) { items = []; }
+    // 만료 제거
+    var now = Date.now() / 1000;
+    items = items.filter(function(e) { return e.expire > now; });
+    localStorage.setItem(key, JSON.stringify(items));
+
+    container.innerHTML = '';
+    if (items.length === 0) {
+      container.innerHTML = '<div class="lib-empty">저장된 항목이 없습니다.<br>생성 후 "📚 라이브러리에 저장" 버튼을 눌러주세요.</div>';
+      return;
+    }
+
+    items.forEach(function(entry, idx) {
+      var card = document.createElement('div');
+      card.className = 'lib-item';
+      var expire = new Date(entry.expire * 1000);
+      var expireStr = expire.getMonth()+1 + '/' + expire.getDate() + ' ' + expire.getHours() + ':' + String(expire.getMinutes()).padStart(2,'0') + ' 까지';
+      var cutCount = (entry.items || []).length;
+
+      card.innerHTML =
+        '<button class="lib-del" data-idx="' + idx + '">🗑 삭제</button>' +
+        '<div class="lib-title">' + escHtml(entry.title) + '</div>' +
+        '<div class="lib-meta">' + entry.date + ' · ' + cutCount + '컷 · ⏳ ' + expireStr + '</div>';
+
+      // 이미지 미리보기 (처음에는 숨김)
+      var imgArea = document.createElement('div');
+      imgArea.className = 'lib-imgs';
+      imgArea.style.display = 'none';
+      (entry.items || []).forEach(function(item) {
+        var wrap = document.createElement('div');
+        if (item.img) {
+          var img = document.createElement('img');
+          img.src = 'data:image/png;base64,' + item.img;
+          wrap.appendChild(img);
+        }
+        var cap = document.createElement('div');
+        cap.className = 'lib-cut';
+        cap.textContent = item.cut;
+        wrap.appendChild(cap);
+        imgArea.appendChild(wrap);
+      });
+      card.appendChild(imgArea);
+
+      // 클릭 시 펼치기/접기
+      card.addEventListener('click', function(e) {
+        if (e.target.classList.contains('lib-del')) return;
+        var visible = imgArea.style.display !== 'none';
+        imgArea.style.display = visible ? 'none' : 'flex';
+        card.classList.toggle('expanded', !visible);
+      });
+
+      // 삭제 버튼
+      card.querySelector('.lib-del').addEventListener('click', function(e) {
+        e.stopPropagation();
+        var i = parseInt(this.getAttribute('data-idx'));
+        var current = JSON.parse(localStorage.getItem(key) || '[]');
+        current.splice(i, 1);
+        localStorage.setItem(key, JSON.stringify(current));
+        render();
+      });
+
+      container.appendChild(card);
+    });
+  }
+
+  function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  render();
+})();
+</script>
+"""
+
+components.html(library_html, height=420, scrolling=True)
+
 
 if st.session_state.step == 0:
     st.markdown("---")
