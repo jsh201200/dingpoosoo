@@ -1,7 +1,6 @@
 import streamlit as st
 from google import genai
 from google.genai import types
-import base64
 import io
 import re
 import time
@@ -97,7 +96,6 @@ def split_script(script, seconds_per_cut):
     return [c for c in final_cuts if c]
 
 def build_image_prompt(client, cut_text, style_guide, format_prompt, language, cut_index, total_cuts):
-    """Gemini 2.5 Flash 텍스트 모델로 프롬프트 생성"""
     lang_cfg = LANGUAGE_SETTINGS[language]
     system = f"""당신은 2D 스틱맨 애니메이션 전문 이미지 프롬프트 작가입니다.
 아래 스타일 가이드를 엄격히 따르세요:
@@ -124,12 +122,12 @@ def build_image_prompt(client, cut_text, style_guide, format_prompt, language, c
     return response.text.strip().strip('"').strip("'")
 
 def generate_image(client, prompt, language):
-    """Nano Banana 2 (gemini-2.5-flash-image-preview)로 이미지 생성"""
+    """이미지 생성 - gemini-2.0-flash-exp-image-generation 사용"""
     lang_cfg = LANGUAGE_SETTINGS[language]
     full_prompt = f"{prompt}, {lang_cfg['negative']}"
 
     response = client.models.generate_content(
-        model="gemini-2.5-flash-image-preview",
+        model="gemini-2.0-flash-exp-image-generation",
         contents=full_prompt,
         config=types.GenerateContentConfig(
             response_modalities=["IMAGE", "TEXT"],
@@ -137,6 +135,7 @@ def generate_image(client, prompt, language):
     )
     for part in response.candidates[0].content.parts:
         if part.inline_data and part.inline_data.mime_type.startswith("image/"):
+            # data는 bytes로 바로 사용
             return Image.open(io.BytesIO(part.inline_data.data))
     return None
 
@@ -219,7 +218,6 @@ if start_btn:
     st.session_state.step = 0
     st.session_state.analysis = ""
 
-    # ✅ 새 SDK 방식: google.genai.Client
     client = genai.Client(api_key=api_key)
 
     # STEP 1
@@ -335,7 +333,6 @@ if st.session_state.step == 4 and st.session_state.cuts:
         st.markdown("---")
         st.download_button("📦 전체 이미지 ZIP 다운로드", zip_buf.getvalue(), "stickman_cuts.zip", "application/zip", type="primary")
 
-# 대기 안내
 if st.session_state.step == 0:
     st.markdown("---")
     st.info("👈 사이드바에서 설정을 완료한 뒤, 대본을 입력하고 **🚀 이미지 생성 시작** 버튼을 눌러주세요.")
@@ -349,5 +346,5 @@ if st.session_state.step == 0:
 
 **모델 정보:**
 - 🧠 대본 분석 / 프롬프트 생성: `gemini-2.5-flash`
-- 🎨 이미지 생성: `gemini-2.5-flash-image-preview` (Nano Banana 2 🍌)
+- 🎨 이미지 생성: `gemini-2.0-flash-exp-image-generation` (Nano Banana 2 🍌)
         """)
