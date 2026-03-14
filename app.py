@@ -96,6 +96,7 @@ def split_script(script, seconds_per_cut):
     return [c for c in final_cuts if c]
 
 def build_image_prompt(client, cut_text, style_guide, format_prompt, language, cut_index, total_cuts):
+    """Gemini 2.5 Flash 텍스트 모델로 프롬프트 생성"""
     lang_cfg = LANGUAGE_SETTINGS[language]
     system = f"""당신은 2D 스틱맨 애니메이션 전문 이미지 프롬프트 작가입니다.
 아래 스타일 가이드를 엄격히 따르세요:
@@ -122,21 +123,24 @@ def build_image_prompt(client, cut_text, style_guide, format_prompt, language, c
     return response.text.strip().strip('"').strip("'")
 
 def generate_image(client, prompt, language):
-    """이미지 생성 - gemini-2.0-flash-exp-image-generation 사용"""
+    """
+    이미지 생성 - imagen-3.0-generate-002 사용
+    generate_images() 함수 + image_bytes 방식
+    """
     lang_cfg = LANGUAGE_SETTINGS[language]
     full_prompt = f"{prompt}, {lang_cfg['negative']}"
 
-    response = client.models.generate_content(
-        model="gemini-2.0-flash-exp-image-generation",
-        contents=full_prompt,
-        config=types.GenerateContentConfig(
-            response_modalities=["IMAGE", "TEXT"],
+    response = client.models.generate_images(
+        model="imagen-3.0-generate-002",
+        prompt=full_prompt,
+        config=types.GenerateImagesConfig(
+            number_of_images=1,
+            output_mime_type="image/jpeg",
         )
     )
-    for part in response.candidates[0].content.parts:
-        if part.inline_data and part.inline_data.mime_type.startswith("image/"):
-            # data는 bytes로 바로 사용
-            return Image.open(io.BytesIO(part.inline_data.data))
+    if response.generated_images:
+        image_bytes = response.generated_images[0].image.image_bytes
+        return Image.open(io.BytesIO(image_bytes))
     return None
 
 # 세션 초기화
@@ -173,7 +177,7 @@ with st.sidebar:
 
 # 메인
 st.markdown('<div class="main-header">🎬 스틱맨 이미지 생성기</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Powered by Gemini 2.5 Flash + Nano Banana 2 🍌</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Powered by Gemini 2.5 Flash + Imagen 3 🍌</div>', unsafe_allow_html=True)
 
 script = st.text_area("📝 대본 입력", height=160,
     placeholder="여기에 대본을 붙여넣으세요...\n\n예) 부자들은 위기를 기회로 삼습니다. 주식 시장이 폭락할 때 오히려 매수 버튼을 누르죠.")
@@ -220,7 +224,7 @@ if start_btn:
 
     client = genai.Client(api_key=api_key)
 
-    # STEP 1
+    # STEP 1: 대본 분석
     with st.status("**1단계: 대본 분석 중...**", expanded=True) as status_1:
         try:
             r = client.models.generate_content(
@@ -236,7 +240,7 @@ if start_btn:
             status_1.update(label=f"❌ 대본 분석 실패: {e}", state="error")
             st.stop()
 
-    # STEP 2
+    # STEP 2: 초단위 분할
     with st.status("**2단계: 초단위 분할 중...**", expanded=True) as status_2:
         cuts = split_script(script, seconds_per_cut)
         st.session_state.cuts = cuts
@@ -246,7 +250,7 @@ if start_btn:
             st.markdown(f"**컷 {i+1}** ({len(cut)}글자): {cut}")
         status_2.update(label=f"✅ 2단계: {len(cuts)}개 컷으로 분할 완료", state="complete")
 
-    # STEP 3
+    # STEP 3: 프롬프트 생성
     prompts = []
     with st.status("**3단계: 이미지 프롬프트 생성 중...**", expanded=True) as status_3:
         prog3 = st.progress(0)
@@ -265,9 +269,9 @@ if start_btn:
         st.session_state.step = 3
         status_3.update(label=f"✅ 3단계: {len(prompts)}개 프롬프트 생성 완료", state="complete")
 
-    # STEP 4
+    # STEP 4: 이미지 생성
     images = [None]*len(cuts)
-    with st.status("**4단계: 이미지 생성 중 (Nano Banana 2 🍌)...**", expanded=True) as status_4:
+    with st.status("**4단계: 이미지 생성 중 (Imagen 3 🍌)...**", expanded=True) as status_4:
         prog4 = st.progress(0)
         img_ph = st.empty()
         for i, (cut, prompt) in enumerate(zip(cuts, prompts)):
@@ -346,5 +350,8 @@ if st.session_state.step == 0:
 
 **모델 정보:**
 - 🧠 대본 분석 / 프롬프트 생성: `gemini-2.5-flash`
-- 🎨 이미지 생성: `gemini-2.0-flash-exp-image-generation` (Nano Banana 2 🍌)
+- 🎨 이미지 생성: `imagen-3.0-generate-002`
+
+⚠️ **참고:** Imagen 3는 유료 API 플랜에서만 사용 가능합니다.
+Google AI Studio → 결제 수단 등록 필요
         """)
