@@ -76,64 +76,70 @@ def split_script(script, seconds_per_cut):
 
 def build_image_prompt(client, cut_text, style_guide, format_prompt, language, cut_index, total_cuts):
     """
-    Gemini 2.5 Flash로 대본 내용 → 영문 이미지 프롬프트 생성
-    대본의 구체적인 행동/장면이 반드시 반영되도록 강하게 지시
+    대본 한 컷 → 영문 이미지 프롬프트
+    핵심: 대본의 구체적 행동/감정/상황을 짧고 직접적인 시각 묘사로 변환
     """
     lang_note = LANGUAGE_SETTINGS[language]
 
-    system_instruction = f"""You are an expert image prompt writer specializing in 2D stick-man animation scenes.
+    system_instruction = f"""You are an expert visual scene describer.
+Your task: Read a Korean script line and describe EXACTLY what is happening in it as a vivid English visual scene.
 
-YOUR ONLY JOB: Convert the given Korean script segment into ONE precise English image generation prompt.
+RULES:
+- Focus 100% on what the script TEXT says — the specific action, emotion, or situation
+- Describe WHO is doing WHAT, with what EXPRESSION, in what SETTING
+- Use concrete visual details: person's posture, gesture, facial expression, objects present
+- Keep it under 60 words for the scene description
+- Output ONLY the scene description (no style words, no prefix, just the scene)
 
-MANDATORY RULES:
-1. The prompt MUST specifically describe what is HAPPENING in the script — the exact action, emotion, or concept from the text
-2. Always start with the style prefix: "Upgraded stick-man 2D with thick black outline, pure white round faces, single hard cel shading, thicker torso, stick limbs, flat matte colors; SCENE:"
-3. After "SCENE:" describe the SPECIFIC action/scene from the script in vivid visual terms
-4. Use concrete visual verbs: holds, points, gestures, leans, raises, clasps, runs, falls, celebrates, etc.
-5. For abstract concepts: use icons (arrow↑ for growth, chart shape for data, coin icon for money, etc.)
-6. End with: "{lang_note}"
-7. Output ONLY the prompt — no explanation, no quotes, no numbering
+EXAMPLES:
+Script: "부자들은 위기를 기회로 삼습니다"
+Scene: a wealthy-looking man in a suit standing calmly with arms crossed and a confident smile, while storm clouds and falling arrows surround him — he looks unafraid, even pleased
 
-STYLE REFERENCE:
-{style_guide}
-
-EXAMPLE:
 Script: "주식 시장이 폭락할 때 오히려 매수 버튼을 누르죠"
-Output: In the distinctive hand-drawn, loose ink-and-wash style of Quentin Blake, vintage children's book illustration; loose expressive scribbled ink lines, minimal transparent watercolor wash, pure white background, soft muted tones; SCENE: a confident man pressing a large button with a bold decisive gesture while chaotic figures around him panic and flail, expressive dynamic poses, ochre and pale blue wash; {lang_note}"""
+Scene: a man boldly pressing a large green button labeled BUY while crowds of panicking people run away behind him, red graphs plunging in the background
 
-    user_msg = f"""Convert this Korean script segment (cut {cut_index} of {total_cuts}) into an image prompt.
-
-SCRIPT SEGMENT:
-"{cut_text}"
-
-Write ONE English image prompt that SPECIFICALLY shows what this script is about. The visual must clearly represent the content of this script."""
+Script: "히엉쌤 사랑해요"
+Scene: a group of cheerful students jumping with joy, arms raised, hearts floating around them, faces beaming with affection toward a teacher figure standing proudly"""
 
     response = client.models.generate_content(
         model="gemini-2.5-flash",
-        contents=user_msg,
+        contents=f'Script (cut {cut_index}/{total_cuts}):\n"{cut_text}"\n\nDescribe the visual scene:',
         config=types.GenerateContentConfig(
             system_instruction=system_instruction,
-            temperature=0.6,
-            max_output_tokens=400,
+            temperature=0.5,
+            max_output_tokens=150,
         )
     )
-    raw = response.text.strip().strip('"').strip("'")
-    
-    # 스타일 prefix가 빠진 경우 보완
-    if not raw.lower().startswith("in the distinctive"):
-        raw = f"In the distinctive hand-drawn, loose ink-and-wash style of Quentin Blake, vintage children's book illustration; loose expressive scribbled ink lines, minimal transparent watercolor wash, pure white background, soft muted tones; SCENE: {raw}; {lang_note}"
-    
-    return raw
+    scene_description = response.text.strip().strip('"').strip("'")
 
-def generate_image(client, prompt, language):
-    """이미지 생성"""
+    # 스타일 + 장면 조합
+    full_prompt = (
+        f"In the distinctive hand-drawn, loose ink-and-wash style of Quentin Blake, "
+        f"vintage children's book illustration. Loose expressive scribbled ink line work, "
+        f"minimal transparent watercolor wash, pure white background, soft muted tones "
+        f"(washed blues, pale greens, ochre, soft reds). "
+        f"SCENE TO DRAW: {scene_description}. "
+        f"{lang_note}."
+    )
+    return full_prompt, scene_description
+
+
+def generate_image(client, prompt, cut_text, language):
+    """
+    이미지 생성 — 프롬프트 + 원본 대본을 함께 넘겨서 내용 일치율 높임
+    """
     lang_note = LANGUAGE_SETTINGS[language]
-    # 언어 지시와 스타일 강화를 프롬프트 끝에 추가
-    full_prompt = f"{prompt}\n\nSTRICT REQUIREMENTS: Draw exactly what is described above. {lang_note}. Stick-man style ONLY."
+
+    # 이미지 모델에게: 프롬프트 + 원본 대본 내용을 같이 전달
+    final_prompt = (
+        f"{prompt}\n\n"
+        f"IMPORTANT: The image must visually represent this specific content: '{cut_text}'\n"
+        f"Draw exactly the scene described. {lang_note}."
+    )
 
     response = client.models.generate_content(
         model="gemini-3.1-flash-image-preview",
-        contents=full_prompt,
+        contents=final_prompt,
         config=types.GenerateContentConfig(
             response_modalities=["TEXT", "IMAGE"],
         )
@@ -148,7 +154,7 @@ def generate_image(client, prompt, language):
     return None
 
 # 세션 초기화
-for key, default in [("cuts",[]),("prompts",[]),("images",[]),("step",0),("analysis",""),("errors",[])]:
+for key, default in [("cuts",[]),("prompts",[]),("scenes",[]),("images",[]),("step",0),("analysis",""),("errors",[])]:
     if key not in st.session_state:
         st.session_state[key] = default
 
@@ -196,7 +202,7 @@ with col_btn2:
     reset_btn = st.button("🔄 초기화", use_container_width=True)
 
 if reset_btn:
-    for k in ["cuts","prompts","images","errors"]:
+    for k in ["cuts","prompts","scenes","images","errors"]:
         st.session_state[k] = []
     st.session_state.step = 0
     st.session_state.analysis = ""
@@ -265,26 +271,33 @@ if start_btn:
 
     # ── STEP 3: 프롬프트 생성 ──────────────────────────────────
     prompts = []
+    scenes = []
     with st.status("**3단계: 대본 → 이미지 프롬프트 변환 중...**", expanded=True) as s3:
         prog3 = st.progress(0)
         for i, cut in enumerate(cuts):
-            st.write(f"🖊 컷 {i+1}/{len(cuts)}: `{cut[:30]}...` → 프롬프트 생성 중")
+            st.write(f"🖊 컷 {i+1}/{len(cuts)}: `{cut[:25]}...` → 장면 분석 중")
             try:
-                p = build_image_prompt(
+                prompt, scene = build_image_prompt(
                     client, cut, style_guide, format_prompt, language, i+1, len(cuts)
                 )
-                prompts.append(p)
-                # 프롬프트 미리보기 (SCENE: 이후만 보여줌)
-                scene_part = p.split("SCENE:")[-1][:100] if "SCENE:" in p else p[:100]
-                st.caption(f"→ SCENE: {scene_part}...")
+                prompts.append(prompt)
+                scenes.append(scene)
+                st.caption(f"→ 장면: {scene[:80]}...")
             except Exception as e:
-                fallback = f"In the distinctive hand-drawn, loose ink-and-wash style of Quentin Blake, vintage children's book illustration; loose expressive scribbled ink lines, minimal transparent watercolor wash, pure white background, soft muted tones; SCENE: expressive characters in a scene related to: {cut[:60]}; no text"
+                scene = f"expressive characters in a scene related to: {cut[:60]}"
+                fallback = (
+                    f"In the distinctive hand-drawn, loose ink-and-wash style of Quentin Blake, "
+                    f"vintage children's book illustration. SCENE TO DRAW: {scene}. "
+                    f"{LANGUAGE_SETTINGS[language]}."
+                )
                 prompts.append(fallback)
+                scenes.append(scene)
                 st.session_state.errors.append(f"컷 {i+1} 프롬프트 오류: {e}")
             prog3.progress((i+1)/len(cuts))
             time.sleep(0.4)
 
         st.session_state.prompts = prompts
+        st.session_state.scenes = scenes
         st.session_state.step = 3
         s3.update(label=f"✅ 3단계: {len(prompts)}개 프롬프트 생성 완료", state="complete")
 
@@ -296,7 +309,7 @@ if start_btn:
         for i, (cut, prompt) in enumerate(zip(cuts, prompts)):
             st.write(f"🎨 컷 {i+1}/{len(cuts)} 이미지 생성 중...")
             try:
-                img = generate_image(client, prompt, language)
+                img = generate_image(client, prompt, cut, language)
                 images[i] = img
                 if img:
                     img_ph.image(img, caption=f"컷 {i+1}: {cut[:30]}...", width=320)
@@ -324,8 +337,9 @@ if st.session_state.step == 4 and st.session_state.cuts:
             for err in st.session_state.errors:
                 st.caption(err)
 
-    cuts   = st.session_state.cuts
+    cuts    = st.session_state.cuts
     prompts = st.session_state.prompts
+    scenes  = st.session_state.get("scenes", [""] * len(cuts))
     images  = st.session_state.images
 
     for row_start in range(0, len(cuts), 3):
@@ -344,10 +358,15 @@ if st.session_state.step == 4 and st.session_state.cuts:
                     )
                 else:
                     st.warning("생성 실패")
-                # 대본 내용 + 프롬프트 둘 다 보여줌
+                # 대본 원문
                 st.caption(f"📝 대본: {cut}")
+                # 장면 해석 (중간 단계 투명하게 보여줌)
+                if i < len(scenes) and scenes[i]:
+                    with st.expander("🎬 장면 해석 보기"):
+                        st.write(scenes[i])
+                # 전체 프롬프트
                 if i < len(prompts):
-                    with st.expander("🔍 생성된 프롬프트 보기"):
+                    with st.expander("🔍 전체 프롬프트 보기"):
                         st.code(prompts[i], language="text")
 
     if any(img is not None for img in images):
