@@ -33,6 +33,47 @@ Colors are limited to soft, muted tones (e.g., washed-out blues, pale greens, oc
 - Expressive character poses and emotions through body language and facial lines
 - Minimal background, focus on character action"""
 
+STYLE_PRESETS = {
+    "🎨 퀜틴 블레이크 (따뜻한 수채화)": {
+        "prefix": (
+            "In the distinctive hand-drawn, loose ink-and-wash style of Quentin Blake, "
+            "vintage children's book illustration. Loose expressive scribbled ink lines, "
+            "minimal transparent watercolor wash, pure white background, soft muted tones "
+            "(washed blues, pale greens, ochre, soft reds)."
+        ),
+        "mood": "warm, expressive, humanistic",
+    },
+    "📰 뉴스/시사 다큐 일러스트": {
+        "prefix": (
+            "Editorial news illustration style, bold graphic ink lines, high-contrast composition, "
+            "dark dramatic shadows, strong visual metaphors, newspaper editorial art style. "
+            "Flat bold colors — deep red, dark navy, stark white, charcoal black. "
+            "Powerful and direct visual storytelling, no decorative elements."
+        ),
+        "mood": "dramatic, serious, impactful",
+    },
+    "🎭 극적인 흑백 잉크": {
+        "prefix": (
+            "Dramatic black-and-white ink illustration, bold brush strokes, high contrast, "
+            "expressive figures with strong shadows and stark lighting. "
+            "Political cartoon / graphic novel style. Pure white background, only black ink."
+        ),
+        "mood": "stark, powerful, cinematic",
+    },
+    "✏️ 심플 라인아트 (미니멀)": {
+        "prefix": (
+            "Simple clean line art illustration, minimal style, thin precise black outlines, "
+            "flat pastel color fills, white background, modern editorial infographic aesthetic. "
+            "Clear and direct visual communication."
+        ),
+        "mood": "clean, modern, clear",
+    },
+    "🖌️ 커스텀 (직접 입력)": {
+        "prefix": "",
+        "mood": "",
+    },
+}
+
 DEFAULT_FORMAT_PROMPT = """In the distinctive hand-drawn, loose ink-and-wash style of Quentin Blake, vintage children's book illustration; loose expressive scribbled ink lines, minimal transparent watercolor wash, pure white background, soft muted tones (washed blues, pale greens, ochre, soft reds); SCENE: {scene_description}; no text, no letters."""
 
 LANGUAGE_SETTINGS = {
@@ -124,53 +165,57 @@ def split_script_fallback(script, seconds_per_cut):
             final_cuts.append(cut)
     return [c for c in final_cuts if c]
 
-def build_image_prompt(client, cut_text, style_guide, format_prompt, language, cut_index, total_cuts):
+def build_image_prompt(client, cut_text, style_prefix, language, cut_index, total_cuts):
     """
-    대본 한 컷 → 영문 이미지 프롬프트
-    핵심: 대본의 구체적 행동/감정/상황을 짧고 직접적인 시각 묘사로 변환
+    대본 → 이미지 프롬프트
+    핵심: 대본의 구체적 키워드/상황을 반드시 시각화하도록 2단계 처리
+    1단계: 대본에서 핵심 시각 요소 추출
+    2단계: 추출된 요소로 구체적 장면 구성
     """
     lang_note = LANGUAGE_SETTINGS[language]
 
-    system_instruction = f"""You are an expert visual scene describer.
-Your task: Read a Korean script line and describe EXACTLY what is happening in it as a vivid English visual scene.
+    system_instruction = """You are a professional visual scene analyst and image prompt writer.
 
-RULES:
-- Focus 100% on what the script TEXT says — the specific action, emotion, or situation
-- Describe WHO is doing WHAT, with what EXPRESSION, in what SETTING
-- Use concrete visual details: person's posture, gesture, facial expression, objects present
-- Keep it under 60 words for the scene description
-- Output ONLY the scene description (no style words, no prefix, just the scene)
+YOUR TASK: Convert a Korean script segment into a precise English visual scene description.
 
-EXAMPLES:
-Script: "부자들은 위기를 기회로 삼습니다"
-Scene: a wealthy-looking man in a suit standing calmly with arms crossed and a confident smile, while storm clouds and falling arrows surround him — he looks unafraid, even pleased
+STRICT PROCESS (follow both steps):
 
-Script: "주식 시장이 폭락할 때 오히려 매수 버튼을 누르죠"
-Scene: a man boldly pressing a large green button labeled BUY while crowds of panicking people run away behind him, red graphs plunging in the background
+STEP 1 — Extract from the script:
+- WHO: specific people/entities mentioned (e.g., China, terrorist, victims, politician)
+- WHAT: the core action or event happening
+- KEY OBJECTS: specific items, symbols, money amounts, maps, flags, weapons, documents
+- EMOTION/TONE: fear, anger, grief, irony, shock, triumph
 
-Script: "히엉쌤 사랑해요"
-Scene: a group of cheerful students jumping with joy, arms raised, hearts floating around them, faces beaming with affection toward a teacher figure standing proudly"""
+STEP 2 — Build a visual scene using those elements:
+- Place the extracted WHO doing the extracted WHAT
+- Include KEY OBJECTS as visual symbols (e.g., "a giant pile of gold coins labeled ¥90T", "a target/crosshair symbol", "a map of Afghanistan")
+- Show the EMOTION through poses and expressions
+- Be SPECIFIC — not "people mourning" but "a crowd of diverse figures standing in shocked silence, hands over mouths"
+- Keep under 80 words
+
+OUTPUT: Only the scene description (no style words, no "SCENE:", no explanation)
+
+CRITICAL: The output MUST visually represent the SPECIFIC content of the script.
+If the script mentions China → show Chinese symbols/figures
+If the script mentions money → show coins, bills, specific amounts as visual icons
+If the script mentions terror/attack → show dramatic impact, not gentle sadness"""
 
     response = client.models.generate_content(
         model="gemini-2.5-flash",
-        contents=f'Script (cut {cut_index}/{total_cuts}):\n"{cut_text}"\n\nDescribe the visual scene:',
+        contents=f"""Script segment (cut {cut_index}/{total_cuts}):
+"{cut_text}"
+
+Extract the key visual elements and describe the scene:""",
         config=types.GenerateContentConfig(
             system_instruction=system_instruction,
-            temperature=0.5,
-            max_output_tokens=150,
+            temperature=0.4,
+            max_output_tokens=200,
         )
     )
     scene_description = response.text.strip().strip('"').strip("'")
 
-    # 스타일 + 장면 조합
-    full_prompt = (
-        f"In the distinctive hand-drawn, loose ink-and-wash style of Quentin Blake, "
-        f"vintage children's book illustration. Loose expressive scribbled ink line work, "
-        f"minimal transparent watercolor wash, pure white background, soft muted tones "
-        f"(washed blues, pale greens, ochre, soft reds). "
-        f"SCENE TO DRAW: {scene_description}. "
-        f"{lang_note}."
-    )
+    # 스타일 prefix + 장면 조합
+    full_prompt = f"{style_prefix} SCENE: {scene_description}. {lang_note}."
     return full_prompt, scene_description
 
 
@@ -226,14 +271,28 @@ with st.sidebar:
     language = st.radio("이미지 내 텍스트 언어", options=["언어 없음","한국어","일본어","영어"], index=0)
     st.divider()
 
-    st.markdown("### 🎨 스타일 가이드")
-    style_guide = st.text_area("스타일 가이드 (편집 가능)", value=DEFAULT_STYLE_GUIDE, height=200)
+    st.markdown("### 🎨 이미지 스타일")
+    selected_style = st.selectbox(
+        "스타일 선택",
+        options=list(STYLE_PRESETS.keys()),
+        index=0,
+        help="대본 분위기에 맞는 스타일을 선택하세요."
+    )
+    st.caption(f"분위기: *{STYLE_PRESETS[selected_style]['mood']}*")
+
+    if selected_style == "🖌️ 커스텀 (직접 입력)":
+        custom_style = st.text_area("커스텀 스타일 프롬프트", value=DEFAULT_STYLE_GUIDE, height=160)
+        style_prefix = custom_style
+    else:
+        style_prefix = STYLE_PRESETS[selected_style]["prefix"]
+        with st.expander("스타일 프롬프트 보기"):
+            st.caption(style_prefix)
     st.divider()
 
-    st.markdown("### 📋 프롬프트 형식 (선택)")
-    format_prompt = st.text_area("커스텀 형식 (비워두면 기본값)", placeholder="비워두면 기본 스틱맨 형식 사용", height=80)
-    if not format_prompt.strip():
-        format_prompt = DEFAULT_FORMAT_PROMPT
+    st.markdown("### 📋 추가 스타일 지시 (선택)")
+    extra_style = st.text_area("추가 지시사항 (비워두면 기본값)", placeholder="예: 배경을 어둡게, 인물을 크게 등", height=60)
+    if extra_style.strip():
+        style_prefix = style_prefix + " " + extra_style.strip()
 
 # 메인
 st.markdown('<div class="main-header">🎬 스틱맨 이미지 생성기</div>', unsafe_allow_html=True)
@@ -328,18 +387,14 @@ if start_btn:
             st.write(f"🖊 컷 {i+1}/{len(cuts)}: `{cut[:25]}...` → 장면 분석 중")
             try:
                 prompt, scene = build_image_prompt(
-                    client, cut, style_guide, format_prompt, language, i+1, len(cuts)
+                    client, cut, style_prefix, language, i+1, len(cuts)
                 )
                 prompts.append(prompt)
                 scenes.append(scene)
                 st.caption(f"→ 장면: {scene[:80]}...")
             except Exception as e:
                 scene = f"expressive characters in a scene related to: {cut[:60]}"
-                fallback = (
-                    f"In the distinctive hand-drawn, loose ink-and-wash style of Quentin Blake, "
-                    f"vintage children's book illustration. SCENE TO DRAW: {scene}. "
-                    f"{LANGUAGE_SETTINGS[language]}."
-                )
+                fallback = f"{style_prefix} SCENE: {scene}. {LANGUAGE_SETTINGS[language]}."
                 prompts.append(fallback)
                 scenes.append(scene)
                 st.session_state.errors.append(f"컷 {i+1} 프롬프트 오류: {e}")
