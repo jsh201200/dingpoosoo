@@ -1,5 +1,6 @@
 import streamlit as st
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 import base64
 import io
 import re
@@ -72,8 +73,7 @@ def split_script(script, seconds_per_cut):
     target = chars_per_second(seconds_per_cut)
     script = re.sub(r'\s+', ' ', script.strip())
     sentences = re.split(r'(?<=[.!?。])\s*', script)
-    cuts = []
-    current = ""
+    cuts, current = [], ""
     for sent in sentences:
         sent = sent.strip()
         if not sent:
@@ -96,11 +96,10 @@ def split_script(script, seconds_per_cut):
             final_cuts.append(cut)
     return [c for c in final_cuts if c]
 
-def build_image_prompt(cut_text, style_guide, format_prompt, language, cut_index, total_cuts):
+def build_image_prompt(client, cut_text, style_guide, format_prompt, language, cut_index, total_cuts):
+    """Gemini 2.5 Flash 텍스트 모델로 프롬프트 생성"""
     lang_cfg = LANGUAGE_SETTINGS[language]
-    model = genai.GenerativeModel(
-        model_name="gemini-2.5-flash",
-        system_instruction=f"""당신은 2D 스틱맨 애니메이션 전문 이미지 프롬프트 작가입니다.
+    system = f"""당신은 2D 스틱맨 애니메이션 전문 이미지 프롬프트 작가입니다.
 아래 스타일 가이드를 엄격히 따르세요:
 
 {style_guide}
@@ -112,31 +111,41 @@ def build_image_prompt(cut_text, style_guide, format_prompt, language, cut_index
 - 반드시 영어로만 작성하세요.
 - 프롬프트는 한 줄로 출력하세요. 설명, 번호, 따옴표 불필요.
 - 프롬프트 형식: {format_prompt}"""
-    )
-    response = model.generate_content(
-        f'컷 {cut_index}/{total_cuts}: 아래 대본 내용을 시각적으로 표현하는 이미지 프롬프트를 작성하세요.\n\n대본 내용:\n"{cut_text}"\n\n위 내용을 스틱맨 스타일로 표현하는 한 줄 영문 이미지 프롬프트를 작성하세요.',
-        generation_config=genai.GenerationConfig(temperature=0.7, max_output_tokens=300)
+
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=f'컷 {cut_index}/{total_cuts}: 아래 대본 내용을 시각적으로 표현하는 이미지 프롬프트를 작성하세요.\n\n대본 내용:\n"{cut_text}"\n\n위 내용을 스틱맨 스타일로 표현하는 한 줄 영문 이미지 프롬프트를 작성하세요.',
+        config=types.GenerateContentConfig(
+            system_instruction=system,
+            temperature=0.7,
+            max_output_tokens=300,
+        )
     )
     return response.text.strip().strip('"').strip("'")
 
-def generate_image(prompt, language):
+def generate_image(client, prompt, language):
+    """Nano Banana 2 (gemini-2.5-flash-image-preview)로 이미지 생성"""
     lang_cfg = LANGUAGE_SETTINGS[language]
     full_prompt = f"{prompt}, {lang_cfg['negative']}"
-    model = genai.GenerativeModel("gemini-2.0-flash-preview-image-generation")
-    response = model.generate_content(
+
+    response = client.models.generate_content(
+        model="gemini-2.5-flash-image-preview",
         contents=full_prompt,
-        generation_config={"response_modalities": ["IMAGE", "TEXT"]},
+        config=types.GenerateContentConfig(
+            response_modalities=["IMAGE", "TEXT"],
+        )
     )
     for part in response.candidates[0].content.parts:
-        if hasattr(part, 'inline_data') and part.inline_data and part.inline_data.mime_type.startswith("image/"):
-            img_bytes = base64.b64decode(part.inline_data.data)
-            return Image.open(io.BytesIO(img_bytes))
+        if part.inline_data and part.inline_data.mime_type.startswith("image/"):
+            return Image.open(io.BytesIO(part.inline_data.data))
     return None
 
+# 세션 초기화
 for key, default in [("cuts",[]),("prompts",[]),("images",[]),("step",0),("analysis",""),("errors",[])]:
     if key not in st.session_state:
         st.session_state[key] = default
 
+# 사이드바
 with st.sidebar:
     st.markdown("## ⚙️ 설정")
     st.markdown("### 🔑 API 키")
@@ -163,10 +172,12 @@ with st.sidebar:
     if not format_prompt.strip():
         format_prompt = DEFAULT_FORMAT_PROMPT
 
+# 메인
 st.markdown('<div class="main-header">🎬 스틱맨 이미지 생성기</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">Powered by Gemini 2.5 Flash + Nano Banana 2 🍌</div>', unsafe_allow_html=True)
 
-script = st.text_area("📝 대본 입력", height=160, placeholder="여기에 대본을 붙여넣으세요...\n\n예) 부자들은 위기를 기회로 삼습니다. 주식 시장이 폭락할 때 오히려 매수 버튼을 누르죠.")
+script = st.text_area("📝 대본 입력", height=160,
+    placeholder="여기에 대본을 붙여넣으세요...\n\n예) 부자들은 위기를 기회로 삼습니다. 주식 시장이 폭락할 때 오히려 매수 버튼을 누르죠.")
 
 col_btn1, col_btn2 = st.columns([3,1])
 with col_btn1:
@@ -208,14 +219,16 @@ if start_btn:
     st.session_state.step = 0
     st.session_state.analysis = ""
 
-    genai.configure(api_key=api_key)
+    # ✅ 새 SDK 방식: google.genai.Client
+    client = genai.Client(api_key=api_key)
 
+    # STEP 1
     with st.status("**1단계: 대본 분석 중...**", expanded=True) as status_1:
         try:
-            m = genai.GenerativeModel("gemini-2.5-flash")
-            r = m.generate_content(
-                f"아래 대본을 분석하고, 다음 항목을 간단하게 요약해주세요 (한국어):\n1. 주제 (한 줄)\n2. 전달 메시지 (핵심)\n3. 주요 등장 개념/인물\n\n대본:\n{script}",
-                generation_config=genai.GenerationConfig(max_output_tokens=300, temperature=0.3)
+            r = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=f"아래 대본을 분석하고, 다음 항목을 간단하게 요약해주세요 (한국어):\n1. 주제 (한 줄)\n2. 전달 메시지 (핵심)\n3. 주요 등장 개념/인물\n\n대본:\n{script}",
+                config=types.GenerateContentConfig(max_output_tokens=300, temperature=0.3)
             )
             st.session_state.analysis = r.text.strip()
             st.session_state.step = 1
@@ -225,6 +238,7 @@ if start_btn:
             status_1.update(label=f"❌ 대본 분석 실패: {e}", state="error")
             st.stop()
 
+    # STEP 2
     with st.status("**2단계: 초단위 분할 중...**", expanded=True) as status_2:
         cuts = split_script(script, seconds_per_cut)
         st.session_state.cuts = cuts
@@ -234,13 +248,14 @@ if start_btn:
             st.markdown(f"**컷 {i+1}** ({len(cut)}글자): {cut}")
         status_2.update(label=f"✅ 2단계: {len(cuts)}개 컷으로 분할 완료", state="complete")
 
+    # STEP 3
     prompts = []
     with st.status("**3단계: 이미지 프롬프트 생성 중...**", expanded=True) as status_3:
         prog3 = st.progress(0)
         for i, cut in enumerate(cuts):
             st.write(f"🖊 컷 {i+1}/{len(cuts)} 프롬프트 생성 중...")
             try:
-                p = build_image_prompt(cut, style_guide, format_prompt, language, i+1, len(cuts))
+                p = build_image_prompt(client, cut, style_guide, format_prompt, language, i+1, len(cuts))
                 prompts.append(p)
                 st.caption(f"→ {p[:120]}{'...' if len(p)>120 else ''}")
             except Exception as e:
@@ -252,6 +267,7 @@ if start_btn:
         st.session_state.step = 3
         status_3.update(label=f"✅ 3단계: {len(prompts)}개 프롬프트 생성 완료", state="complete")
 
+    # STEP 4
     images = [None]*len(cuts)
     with st.status("**4단계: 이미지 생성 중 (Nano Banana 2 🍌)...**", expanded=True) as status_4:
         prog4 = st.progress(0)
@@ -259,7 +275,7 @@ if start_btn:
         for i, (cut, prompt) in enumerate(zip(cuts, prompts)):
             st.write(f"🎨 컷 {i+1}/{len(cuts)} 이미지 생성 중...")
             try:
-                img = generate_image(prompt, language)
+                img = generate_image(client, prompt, language)
                 images[i] = img
                 if img:
                     img_ph.image(img, caption=f"컷 {i+1} 미리보기", width=300)
@@ -276,6 +292,7 @@ if start_btn:
 
     st.rerun()
 
+# 결과 출력
 if st.session_state.step == 4 and st.session_state.cuts:
     st.markdown("---")
     st.markdown("## 🎉 생성 결과")
@@ -318,9 +335,10 @@ if st.session_state.step == 4 and st.session_state.cuts:
         st.markdown("---")
         st.download_button("📦 전체 이미지 ZIP 다운로드", zip_buf.getvalue(), "stickman_cuts.zip", "application/zip", type="primary")
 
+# 대기 안내
 if st.session_state.step == 0:
     st.markdown("---")
-    st.info("👈 사이드바에서 설정을 완료한 뒤, 대본을 입력하고 **🚀 이미지 생성 시작** 버튼을 눌러주세요.\n\n**처리 순서:** 대본 분석 → 초단위 분할 → 프롬프트 생성 → 이미지 생성")
+    st.info("👈 사이드바에서 설정을 완료한 뒤, 대본을 입력하고 **🚀 이미지 생성 시작** 버튼을 눌러주세요.")
     with st.expander("📌 사용 방법"):
         st.markdown("""
 1. 사이드바에 **Gemini API 키** 입력
@@ -328,9 +346,8 @@ if st.session_state.step == 0:
 3. **이미지 언어** 선택 (언어 없음 / 한국어 / 일본어 / 영어)
 4. 스타일 가이드 / 프롬프트 형식 필요 시 수정
 5. 대본 입력 후 **이미지 생성 시작** 클릭
-6. 4단계 자동 처리 후 결과 확인 및 다운로드
 
 **모델 정보:**
 - 🧠 대본 분석 / 프롬프트 생성: `gemini-2.5-flash`
-- 🎨 이미지 생성: `gemini-2.0-flash-preview-image-generation` (Nano Banana 2 🍌)
+- 🎨 이미지 생성: `gemini-2.5-flash-image-preview` (Nano Banana 2 🍌)
         """)
