@@ -1,244 +1,266 @@
 import streamlit as st
 from google import genai
 from google.genai import types
-import base64
-import io
-import re
-import time
+import base64, io, re, time, json, datetime, zipfile
 from PIL import Image
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-st.set_page_config(
-    page_title="🎬 스틱맨 이미지 생성기",
-    page_icon="🎬",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+# ── 페이지 설정 ────────────────────────────────────────────────
+st.set_page_config(page_title="딩푸수 메이커", page_icon="🎬", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
-    .main-header { font-size:2rem; font-weight:700; text-align:center; margin-bottom:0.2rem; }
-    .sub-header  { font-size:0.95rem; text-align:center; color:#888; margin-bottom:1.5rem; }
-    .step-badge  { display:inline-block; padding:4px 14px; border-radius:20px; font-weight:600; font-size:0.82rem; margin-bottom:0.5rem; }
-    .step-done   { background:#d4edda; color:#155724; }
-    .step-active { background:#cce5ff; color:#004085; }
-    .step-wait   { background:#f0f0f0; color:#888; }
+  [data-testid="stSidebar"] { min-width:260px; max-width:280px; }
+  .block-container { padding-top:1.2rem; padding-bottom:1rem; }
+  .scene-card { border:1px solid #e0e0e0; border-radius:12px; padding:0; overflow:hidden; margin-bottom:16px; background:#fff; }
+  .scene-header { background:#f8f9fa; padding:8px 14px; font-size:0.78rem; font-weight:600; color:#555; border-bottom:1px solid #e0e0e0; display:flex; justify-content:space-between; }
+  .scene-script { padding:10px 14px; font-size:0.88rem; color:#333; line-height:1.5; background:#fff; }
+  .intro-badge { display:inline-block; background:#fff3cd; color:#856404; border-radius:10px; padding:2px 8px; font-size:0.72rem; font-weight:600; }
+  .body-badge  { display:inline-block; background:#d1ecf1; color:#0c5460; border-radius:10px; padding:2px 8px; font-size:0.72rem; font-weight:600; }
+  .status-done { color:#28a745; font-size:0.78rem; }
+  div[data-testid="stVerticalBlock"] > div { gap:0.3rem; }
 </style>
 """, unsafe_allow_html=True)
 
-DEFAULT_STYLE_GUIDE = """In the distinctive hand-drawn, loose ink-and-wash style of Quentin Blake, reminiscent of the aesthetic in vintage children's book illustrations.
-The scene features loose, expressive, dynamic scribbled ink line work. The coloring is a minimal, flat, transparent watercolor wash palette. The composition is isolated on a pure, clean white background, with only essential grounding details (like minimal floor scratches or soft shadows).
-Colors are limited to soft, muted tones (e.g., washed-out blues, pale greens, ochre, soft reds) applied loosely over the ink lines.
-- NO text, NO letters, NO words anywhere in image
-- NO 3D, NO photoreal, NO digital art style
-- Expressive character poses and emotions through body language and facial lines
-- Minimal background, focus on character action"""
-
+# ── 스타일 프리셋 ──────────────────────────────────────────────
 STYLE_PRESETS = {
-    "🎨 퀜틴 블레이크 (따뜻한 수채화)": {
-        "prefix": (
-            "In the distinctive hand-drawn, loose ink-and-wash style of Quentin Blake, "
-            "vintage children's book illustration. Loose expressive scribbled ink lines, "
-            "minimal transparent watercolor wash, pure white background, soft muted tones "
-            "(washed blues, pale greens, ochre, soft reds)."
-        ),
-        "mood": "warm, expressive, humanistic",
-    },
-    "📰 뉴스/시사 다큐 일러스트": {
-        "prefix": (
-            "Editorial news illustration style, bold graphic ink lines, high-contrast composition, "
-            "dark dramatic shadows, strong visual metaphors, newspaper editorial art style. "
-            "Flat bold colors — deep red, dark navy, stark white, charcoal black. "
-            "Powerful and direct visual storytelling, no decorative elements."
-        ),
-        "mood": "dramatic, serious, impactful",
-    },
-    "🎭 극적인 흑백 잉크": {
-        "prefix": (
-            "Dramatic black-and-white ink illustration, bold brush strokes, high contrast, "
-            "expressive figures with strong shadows and stark lighting. "
-            "Political cartoon / graphic novel style. Pure white background, only black ink."
-        ),
-        "mood": "stark, powerful, cinematic",
-    },
-    "✏️ 심플 라인아트 (미니멀)": {
-        "prefix": (
-            "Simple clean line art illustration, minimal style, thin precise black outlines, "
-            "flat pastel color fills, white background, modern editorial infographic aesthetic. "
-            "Clear and direct visual communication."
-        ),
-        "mood": "clean, modern, clear",
-    },
-    "🖌️ 커스텀 (직접 입력)": {
-        "prefix": "",
-        "mood": "",
-    },
+    "🐿️ Pixar/Disney 3D": (
+        "Pixar and Disney CGI animation style, high-quality 3D render with warm cinematic studio lighting. "
+        "Expressive anthropomorphic animal character as the focal point — large soulful eyes, soft detailed fur texture, "
+        "fluid body proportions with oversized head for expressiveness. "
+        "Outfit and accessories are context-appropriate and richly detailed (fabric folds, buttons, badges). "
+        "Background is a fully realized, stylized 3D environment with depth layers: foreground props, midground activity, "
+        "blurred background establishing location. "
+        "Cinematic depth of field, vibrant saturated colors with rim lighting. "
+        "Any Korean or English text in the scene (signs, screens, banners, news tickers, charts) must be sharply rendered, "
+        "legible, correctly spelled, and naturally integrated into the environment. "
+        "Overall feel: Zootopia meets a Korean news studio — polished, warm, emotionally engaging."
+    ),
+    "📰 뉴스/시사 다큐": (
+        "Editorial illustration in the hand-drawn ink-and-wash style of Quentin Blake with aggressive news urgency. "
+        "Loose, expressive, scribbled ink line work — thick where dramatic, thin where delicate. "
+        "High-contrast composition: stark white areas slammed against deep charcoal black shadows. "
+        "Minimal transparent watercolor wash — dominant palette of washed deep crimson red, cold navy blue, "
+        "and urgent ochre yellow, applied loosely over ink lines with deliberate bleed and texture. "
+        "Any Korean or English text (속보, 긴급, headlines, location labels, statistics) must appear as "
+        "bold hand-lettered or stenciled text, dramatically integrated into the composition — "
+        "on banners, chalkboards, torn paper, or broadcast lower-thirds. "
+        "Characters show exaggerated emotion through body language: hunched shoulders for defeat, "
+        "raised fist for defiance, wide-eyed paralysis for shock. "
+        "Background has editorial depth: maps, data charts, silhouetted crowds, architectural outlines. "
+        "Raw, unfinished, powerful — like a breaking news illustration drawn under deadline pressure."
+    ),
+    "😊 실사 다큐 포토": (
+        "National Geographic and Reuters photojournalism aesthetic — cinematic documentary photography style. "
+        "The main subject is an anthropomorphic animal character rendered with extreme photorealistic detail: "
+        "individual fur strands, skin texture around eyes and nose, realistic light refraction in the eyes. "
+        "Shallow depth of field — subject sharp, background beautifully blurred with environmental storytelling. "
+        "Lighting is volumetric and natural: golden-hour warmth, cold blue office fluorescence, "
+        "or dramatic single-source spotlight depending on scene emotion. "
+        "The background is a fully detailed real-world environment (newsroom, protest street, courtroom, market) "
+        "with authentic props, people, and atmosphere. "
+        "Any Korean or English text visible in the scene (news monitors, protest signs, building signage, "
+        "document text, TV chyrons) must be photographically realistic, correctly spelled, "
+        "and naturally lit as if actually present in the environment. "
+        "Shot on Canon EOS R5, 85mm f/1.4 lens, RAW format, 8K resolution. "
+        "Color grading: cinematic LUT — slightly desaturated midtones, lifted shadows, cool highlights. "
+        "Masterpiece quality — the kind of image that wins a World Press Photo award."
+    ),
+    "🎨 퀜틴 블레이크 수채화": (
+        "Quintessential Quentin Blake hand-drawn illustration — loose, joyful, humanistic. "
+        "Scribbled expressive black ink lines with deliberate imperfection and energy. "
+        "Layered transparent watercolor washes with natural bleeding at edges: "
+        "dominant palette of warm washed blues, soft pale greens, golden ochre, dusty rose, and gentle soft reds. "
+        "Pure white background preserved in key areas to create luminosity and airiness. "
+        "Characters are drawn with elastic, exaggerated proportions — rubbery limbs, tilted heads, "
+        "enormous expressive eyes communicating complex emotion in a single glance. "
+        "Backgrounds are suggested rather than fully rendered: loose architectural lines, "
+        "a few gestural strokes establishing location without overpowering the character. "
+        "Any Korean or English text in the image should appear as hand-lettered script "
+        "organically woven into the illustration — on books, signs, banners, or notes — "
+        "in the same loose ink style as the rest of the artwork. "
+        "Overall warmth: the kind of illustration that makes adults feel like children again."
+    ),
+    "🎭 흑백 드라마 잉크": (
+        "Stark, powerful black-and-white ink illustration — political cartoon meets graphic novel gravitas. "
+        "Bold, deliberate brush strokes with dramatic variation: razor-thin lines for detail, "
+        "thick slashing strokes for impact and shadow. "
+        "Chiaroscuro lighting — deep pools of black shadow with sharp white highlights, "
+        "zero mid-tones, maximum emotional contrast. "
+        "Composition is cinematic and theatrical: strong diagonals, extreme close-ups, "
+        "dutch angles, silhouettes against harsh white. "
+        "Characters are drawn with anatomical exaggeration for emotional effect — "
+        "hunched villains, towering heroes, crumbling figures in despair. "
+        "Background elements are bold graphic shapes: city skylines reduced to black geometry, "
+        "crowds as waves of silhouettes, institutions as imposing fortress lines. "
+        "Any Korean or English text must appear as bold, high-contrast block lettering or "
+        "stenciled type integrated into the image — urgent, unmissable, graphically powerful. "
+        "Zero color. Only black ink on white. Like a protest poster designed by a master printmaker."
+    ),
+    "✏️ 모던 인포그래픽": (
+        "Clean, sophisticated modern editorial illustration — information design meets fine art. "
+        "Precise, consistent line weight throughout: thin 1pt outlines on all elements, "
+        "no hand-drawn variation, purely geometric precision. "
+        "Flat color fills only — curated palette of 4-5 colors maximum: "
+        "one dominant neutral (off-white or light gray), two accent colors, one dark anchor color. "
+        "Layout follows clear visual hierarchy: main character/subject large and centered, "
+        "supporting elements organized in clear spatial zones. "
+        "Data visualization elements (charts, graphs, timelines, flow diagrams, maps, percentages) "
+        "are sharply rendered as crisp graphic elements integral to the composition. "
+        "Any Korean or English text — labels, statistics, headlines, captions, UI elements — "
+        "must be typographically clean, correctly spelled, appropriately sized, "
+        "and designed as a core compositional element rather than an afterthought. "
+        "White background with generous negative space. "
+        "Overall aesthetic: the cover of a prestigious Korean economics magazine — "
+        "intelligent, clear, visually elegant."
+    ),
+    "🖌️ 커스텀": "",
 }
 
-DEFAULT_FORMAT_PROMPT = """In the distinctive hand-drawn, loose ink-and-wash style of Quentin Blake, vintage children's book illustration; loose expressive scribbled ink lines, minimal transparent watercolor wash, pure white background, soft muted tones (washed blues, pale greens, ochre, soft reds); SCENE: {scene_description}; no text, no letters."""
 
 LANGUAGE_SETTINGS = {
-    "언어 없음": "absolutely no text, no letters, no words, no numbers, no writing of any kind in the image",
-    "한국어": "Korean text only allowed on signs or labels if necessary, minimal",
-    "일본어": "Japanese text only allowed on signs or labels if necessary, minimal",
-    "영어": "English text only allowed on signs or labels if necessary, minimal",
+    "언어 없음": "absolutely no text, no letters, no words, no numbers anywhere in the image",
+    "한국어": "Korean text allowed on signs or labels, minimal",
+    "일본어": "Japanese text allowed on signs or labels, minimal",
+    "영어": "English text allowed on signs or labels, minimal",
 }
 
-def chars_per_second(seconds):
-    return round(seconds * 4.5)
+# ── 세션 초기화 ────────────────────────────────────────────────
+for k, v in [("cuts",[]),("sections",[]),("styles",[]),("prompts",[]),
+             ("scenes",[]),("images",[]),("step",0),("errors",[]),
+             ("regen_idx",None)]:
+    if k not in st.session_state:
+        st.session_state[k] = v
 
-def split_script_semantic(client, script, seconds_per_cut):
-    """
-    Gemini가 문장 의미 단위로 대본을 분할
-    글자 수 기준이 아니라 내용/호흡/의미 흐름 기준
-    """
-    response = client.models.generate_content(
+# ══════════════════════════════════════════════════════════════
+# 헬퍼 함수들
+# ══════════════════════════════════════════════════════════════
+
+def chars_per_second(s): return round(s * 4.5)
+
+def split_semantic(client, script, seconds):
+    est = max(3, round(len(script) / chars_per_second(seconds)))
+    r = client.models.generate_content(
         model="gemini-2.5-flash",
-        contents=f"""아래 대본을 이미지 한 컷에 어울리는 의미 단위로 분할해주세요.
+        contents=f"""아래 대본을 이미지 컷 단위로 분할하세요.
 
-분할 기준:
-- 한 컷 = 약 {seconds_per_cut}초 분량 (한국어 기준 약 {chars_per_second(seconds_per_cut)}글자)
-- 글자 수보다 **의미와 호흡**을 우선: 하나의 생각/장면/감정이 완결되는 지점에서 자르기
+규칙:
+- 한 컷 = 약 {seconds}초 = 약 {chars_per_second(seconds)}글자
+- 예상 컷 수: 약 {est}개 (이 숫자에 맞춰 분할할 것)
+- 각 문장/절은 별도 컷으로 — 여러 문장을 하나로 뭉치지 말 것
 - 문장 중간에서 자르지 말 것
-- 너무 짧은 컷(10글자 미만)은 앞뒤와 합치기
-- 번호와 내용만 출력 (설명 없이)
+- 5글자 미만만 앞뒤와 합치기
+- 번호. 내용 형식으로만 출력 (설명 없이)
 
-출력 형식 (반드시 이 형식 준수):
-1. [컷 내용]
-2. [컷 내용]
-3. [컷 내용]
+출력:
+1. [내용]
+2. [내용]
 ...
 
 대본:
 {script}""",
-        config=types.GenerateContentConfig(
-            temperature=0.3,
-            max_output_tokens=1000,
-        )
+        config=types.GenerateContentConfig(temperature=0.1, max_output_tokens=2000)
     )
-
-    raw = response.text.strip()
     cuts = []
-    for line in raw.split("\n"):
-        line = line.strip()
-        if not line:
-            continue
-        # "1. 내용" 또는 "1) 내용" 패턴 파싱
-        match = re.match(r'^\d+[\.\)]\s*(.+)', line)
-        if match:
-            cut = match.group(1).strip()
-            if cut:
-                cuts.append(cut)
-
-    # 파싱 실패 시 글자 수 기준으로 fallback
-    if len(cuts) == 0:
-        st.warning("의미 분할 실패 — 글자 수 기준으로 대체합니다.")
-        cuts = split_script_fallback(script, seconds_per_cut)
-
+    for line in r.text.strip().split("\n"):
+        m = re.match(r'^\d+[\.\)]\s*(.+)', line.strip())
+        if m and m.group(1).strip():
+            cuts.append(m.group(1).strip())
+    if not cuts:
+        # fallback: 줄바꿈 기준
+        cuts = [l.strip() for l in script.split("\n") if l.strip()]
     return cuts
 
+def build_prompt(client, cut, style_prefix, character_b64, language, idx, total):
+    lang = LANGUAGE_SETTINGS[language]
 
-def split_script_fallback(script, seconds_per_cut):
-    """글자 수 기준 분할 (백업용)"""
-    target = chars_per_second(seconds_per_cut)
-    script = re.sub(r'\s+', ' ', script.strip())
-    sentences = re.split(r'(?<=[.!?。\n])\s*', script)
-    cuts, current = [], ""
-    for sent in sentences:
-        sent = sent.strip()
-        if not sent:
-            continue
-        if not current:
-            current = sent
-        elif len(current) + len(sent) + 1 <= target * 1.3:
-            current += " " + sent
-        else:
-            cuts.append(current.strip())
-            current = sent
-    if current:
-        cuts.append(current.strip())
-    final_cuts = []
-    for cut in cuts:
-        while len(cut) > target * 1.5:
-            final_cuts.append(cut[:target])
-            cut = cut[target:]
-        if cut:
-            final_cuts.append(cut)
-    return [c for c in final_cuts if c]
+    # 캐릭터 있을 때 / 없을 때 시스템 지시 분기
+    char_section = ""
+    if character_b64:
+        char_section = """
+CHARACTER RULES (CRITICAL):
+- The main character is from the reference image provided
+- Keep species, face shape, fur color/texture, and overall body type IDENTICAL
+- BUT adapt per scene:
+  * EXPRESSION: match the emotion (shocked face, confident smirk, wide eyes in fear, laughing, crying, frowning, etc.)
+  * OUTFIT: change to fit the scene context (formal suit, casual, military, torn clothes, etc.)
+  * POSE/ACTION: dynamic and specific to the scene action
+- Character must be the focal point and clearly doing something relevant to the script"""
 
-def build_image_prompt(client, cut_text, style_prefix, language, cut_index, total_cuts):
-    """
-    대본 → 이미지 프롬프트
-    핵심: 대본의 구체적 키워드/상황을 반드시 시각화하도록 2단계 처리
-    1단계: 대본에서 핵심 시각 요소 추출
-    2단계: 추출된 요소로 구체적 장면 구성
-    """
-    lang_note = LANGUAGE_SETTINGS[language]
+    sys = f"""You are an expert cinematic image prompt writer for AI image generation.
+Convert a Korean script segment into a detailed English image prompt.
 
-    system_instruction = """You are a professional visual scene analyst and image prompt writer.
+{char_section}
 
-YOUR TASK: Convert a Korean script segment into a precise English visual scene description.
+SCENE ANALYSIS PROCESS:
+1. WHO: specific entities (character, crowds, officials, etc.)
+2. WHAT: the core action happening RIGHT NOW in this frame
+3. KEY VISUAL OBJECTS: specific props, symbols, text overlays, icons, maps, charts, money stacks, flags
+4. EMOTION/ATMOSPHERE: what should the viewer FEEL looking at this image
+5. CAMERA/COMPOSITION: close-up, wide shot, dramatic angle, etc.
 
-STRICT PROCESS (follow both steps):
+OUTPUT FORMAT — write a single detailed English paragraph covering:
+- Main character's expression + pose + outfit
+- Specific action happening
+- Key objects and symbols in the scene
+- Background/setting details
+- Lighting and mood
+- Any text/labels that should appear IN the image (e.g. "속보:", chart labels, location names)
 
-STEP 1 — Extract from the script:
-- WHO: specific people/entities mentioned (e.g., China, terrorist, victims, politician)
-- WHAT: the core action or event happening
-- KEY OBJECTS: specific items, symbols, money amounts, maps, flags, weapons, documents
-- EMOTION/TONE: fear, anger, grief, irony, shock, triumph
+QUALITY STANDARDS (match professional editorial illustration):
+- Be HYPER-SPECIFIC: not "a sad character" but "character with trembling lower lip, eyes wide with shock, hands clutching chest"
+- Include CINEMATIC details: dramatic backlighting, depth, foreground elements
+- Specify TEXT OVERLAYS when relevant to the news/story content
+- Maximum 120 words. Output the scene description ONLY."""
 
-STEP 2 — Build a visual scene using those elements:
-- Place the extracted WHO doing the extracted WHAT
-- Include KEY OBJECTS as visual symbols (e.g., "a giant pile of gold coins labeled ¥90T", "a target/crosshair symbol", "a map of Afghanistan")
-- Show the EMOTION through poses and expressions
-- Be SPECIFIC — not "people mourning" but "a crowd of diverse figures standing in shocked silence, hands over mouths"
-- Keep under 80 words
-
-OUTPUT: Only the scene description (no style words, no "SCENE:", no explanation)
-
-CRITICAL: The output MUST visually represent the SPECIFIC content of the script.
-If the script mentions China → show Chinese symbols/figures
-If the script mentions money → show coins, bills, specific amounts as visual icons
-If the script mentions terror/attack → show dramatic impact, not gentle sadness"""
-
-    response = client.models.generate_content(
+    r = client.models.generate_content(
         model="gemini-2.5-flash",
-        contents=f"""Script segment (cut {cut_index}/{total_cuts}):
-"{cut_text}"
-
-Extract the key visual elements and describe the scene:""",
-        config=types.GenerateContentConfig(
-            system_instruction=system_instruction,
-            temperature=0.4,
-            max_output_tokens=200,
-        )
+        contents=f'Script segment {idx}/{total}:\n"{cut}"\n\nWrite the detailed image prompt:',
+        config=types.GenerateContentConfig(system_instruction=sys, temperature=0.45, max_output_tokens=250)
     )
-    scene_description = response.text.strip().strip('"').strip("'")
+    scene = r.text.strip().strip('"').strip("'")
 
-    # 스타일 prefix + 장면 조합
-    full_prompt = f"{style_prefix} SCENE: {scene_description}. {lang_note}."
-    return full_prompt, scene_description
+    # 스타일 + 캐릭터 지시 + 장면 조합
+    char_note = "Use the reference character image provided as the main character. Adapt expression, outfit, and pose to match the scene, but keep the character's core design identical. " if character_b64 else ""
+    full = f"{style_prefix} {char_note}SCENE: {scene}. {lang}."
+    return full, scene
 
 
-def generate_image(client, prompt, cut_text, language):
-    """
-    이미지 생성 — 프롬프트 + 원본 대본을 함께 넘겨서 내용 일치율 높임
-    """
-    lang_note = LANGUAGE_SETTINGS[language]
+def generate_image(client, prompt, cut, character_b64, language):
+    lang = LANGUAGE_SETTINGS[language]
 
-    # 이미지 모델에게: 프롬프트 + 원본 대본 내용을 같이 전달
-    final_prompt = (
+    # 이미지 모델용 최종 프롬프트 — 강화된 지시
+    final = (
         f"{prompt}\n\n"
-        f"IMPORTANT: The image must visually represent this specific content: '{cut_text}'\n"
-        f"Draw exactly the scene described. {lang_note}."
+        f"ADDITIONAL REQUIREMENTS:\n"
+        f"- Draw the EXACT scene described with high detail and cinematic quality\n"
+        f"- The scene must clearly represent: '{cut[:80]}'\n"
+        f"- Include rich background details, dramatic lighting, and expressive characters\n"
+        f"- {lang}"
     )
 
-    response = client.models.generate_content(
-        model="gemini-3.1-flash-image-preview",
-        contents=final_prompt,
-        config=types.GenerateContentConfig(
-            response_modalities=["TEXT", "IMAGE"],
+    if character_b64:
+        contents = [
+            types.Content(role="user", parts=[
+                types.Part(inline_data=types.Blob(mime_type="image/jpeg", data=base64.b64decode(character_b64))),
+                types.Part(text=(
+                    f"This is the reference character. Generate an image using this character as the main character, "
+                    f"adapting their expression, outfit, and pose to match the scene, "
+                    f"but keeping their species, face, and core design identical.\n\n{final}"
+                ))
+            ])
+        ]
+        response = client.models.generate_content(
+            model="gemini-3.1-flash-image-preview",
+            contents=contents,
+            config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"])
         )
-    )
+    else:
+        response = client.models.generate_content(
+            model="gemini-3.1-flash-image-preview",
+            contents=final,
+            config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"])
+        )
 
     for part in response.candidates[0].content.parts:
         if part.inline_data and part.inline_data.mime_type.startswith("image/"):
@@ -248,412 +270,444 @@ def generate_image(client, prompt, cut_text, language):
             return Image.open(io.BytesIO(data))
     return None
 
-# 세션 초기화
-for key, default in [("cuts",[]),("prompts",[]),("scenes",[]),("images",[]),("step",0),("analysis",""),("errors",[])]:
-    if key not in st.session_state:
-        st.session_state[key] = default
+def regen_single(client, i, style_prefix, character_b64, language):
+    cut = st.session_state.cuts[i]
+    try:
+        p, sc = build_prompt(client, cut, style_prefix, character_b64, language, i+1, len(st.session_state.cuts))
+        img = generate_image(client, p, cut, character_b64, language)
+        st.session_state.prompts[i] = p
+        st.session_state.scenes[i]  = sc
+        st.session_state.images[i]  = img
+    except Exception as e:
+        st.session_state.errors.append(f"컷{i+1} 재생성 오류: {e}")
 
+# ══════════════════════════════════════════════════════════════
 # 사이드바
+# ══════════════════════════════════════════════════════════════
 with st.sidebar:
-    st.markdown("## ⚙️ 설정")
+    st.markdown("## 🎬 비전 메이커")
+
+    # API 키
     st.markdown("### 🔑 API 키")
-    api_key = st.text_input("Gemini API Key", type="password", placeholder="AIza...")
-    if api_key:
-        st.success("API 키 입력됨 ✓")
+    api_key = st.text_input("Gemini API Key", type="password", placeholder="AIza...", label_visibility="collapsed")
+    if api_key: st.success("✓ 연결됨", icon="✅")
     st.divider()
 
-    st.markdown("### ⏱ 컷당 시간")
-    seconds_per_cut = st.select_slider("초 선택", options=[5,10,15,20,25,30], value=10)
-    st.caption(f"컷당 목표 **{seconds_per_cut}초** 기준으로 의미 단위 분할합니다.")
-    st.divider()
-
-    st.markdown("### 🌐 이미지 언어")
-    language = st.radio("이미지 내 텍스트 언어", options=["언어 없음","한국어","일본어","영어"], index=0)
-    st.divider()
-
-    st.markdown("### 🎨 이미지 스타일")
-    selected_style = st.selectbox(
-        "스타일 선택",
-        options=list(STYLE_PRESETS.keys()),
-        index=0,
-        help="대본 분위기에 맞는 스타일을 선택하세요."
-    )
-    st.caption(f"분위기: *{STYLE_PRESETS[selected_style]['mood']}*")
-
-    if selected_style == "🖌️ 커스텀 (직접 입력)":
-        custom_style = st.text_area("커스텀 스타일 프롬프트", value=DEFAULT_STYLE_GUIDE, height=160)
-        style_prefix = custom_style
+    # 캐릭터 일관성
+    st.markdown("### 🐾 캐릭터 일관성")
+    st.caption("업로드하면 모든 씬에 같은 캐릭터가 등장합니다.\n표정·행동·옷차림은 장면에 맞게 자동 변경됩니다.")
+    char_file = st.file_uploader("캐릭터 참조 이미지", type=["png","jpg","jpeg"],
+                                  label_visibility="collapsed")
+    character_b64 = None
+    if char_file:
+        img_bytes = char_file.read()
+        character_b64 = base64.b64encode(img_bytes).decode()
+        st.image(img_bytes, width=160, caption="✅ 캐릭터 등록됨")
+        st.caption("😊 슬픔 / 😤 분노 / 😲 충격 / 😄 기쁨 등 상황별 표정 자동 적용")
     else:
-        style_prefix = STYLE_PRESETS[selected_style]["prefix"]
-        with st.expander("스타일 프롬프트 보기"):
-            st.caption(style_prefix)
+        st.caption("미업로드 시 스타일 프롬프트 기반으로 생성됩니다.")
     st.divider()
 
-    st.markdown("### 📋 추가 스타일 지시 (선택)")
-    extra_style = st.text_area("추가 지시사항 (비워두면 기본값)", placeholder="예: 배경을 어둡게, 인물을 크게 등", height=60)
-    if extra_style.strip():
-        style_prefix = style_prefix + " " + extra_style.strip()
+    # 분할 설정
+    st.markdown("### ⏱ 분할 설정")
+    st.markdown("**🎬 인트로**")
+    intro_seconds = st.slider("인트로 컷 시간", 4, 6, 4, step=1,
+                               format="%d초", help="4~6초 고정, 빠른 호흡")
+    st.caption(f"약 {chars_per_second(intro_seconds)}글자 단위")
 
-# 메인
-st.markdown('<div class="main-header">🎬 스틱맨 이미지 생성기</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Powered by Gemini 2.5 Flash + Nano Banana 2 🍌</div>', unsafe_allow_html=True)
+    st.markdown("**📖 본문**")
+    body_seconds = st.select_slider("본문 컷 시간", options=[20,25,30,35,40], value=20,
+                                     format_func=lambda x: f"{x}초")
+    st.caption(f"약 {chars_per_second(body_seconds)}글자 단위")
+    st.divider()
 
-script = st.text_area(
-    "📝 대본 입력",
-    height=160,
-    placeholder="여기에 대본을 붙여넣으세요...\n\n예) 부자들은 위기를 기회로 삼습니다.\n주식 시장이 폭락할 때 오히려 매수 버튼을 누르죠.",
-)
+    # 스타일
+    st.markdown("### 🎨 비주얼 스타일")
+    style_name = st.selectbox("스타일 선택", list(STYLE_PRESETS.keys()), index=0, label_visibility="collapsed")
+    if style_name == "🖌️ 커스텀":
+        style_prefix = st.text_area("커스텀 스타일", height=80, placeholder="스타일 프롬프트 입력...")
+    else:
+        style_prefix = STYLE_PRESETS[style_name]
 
-col_btn1, col_btn2 = st.columns([3,1])
+    extra = st.text_area("추가 특징 (선택)", height=60, placeholder="예: 항상 포근, 주머니에 손...")
+    if extra.strip(): style_prefix = style_prefix + " " + extra.strip()
+    st.divider()
+
+    # 출력 언어
+    st.markdown("### 🌐 출력 언어")
+    language = st.selectbox("언어", list(LANGUAGE_SETTINGS.keys()), label_visibility="collapsed")
+    st.divider()
+
+    # 병렬 작업
+    st.markdown("### ⚡ 병렬 작업")
+    parallel_workers = st.slider("동시 작업 수", 1, 8, 4, step=1, label_visibility="collapsed")
+    st.caption(f"{parallel_workers}개 동시 생성")
+
+# ══════════════════════════════════════════════════════════════
+# 메인 영역
+# ══════════════════════════════════════════════════════════════
+col_title, col_btn1, col_btn2 = st.columns([4, 1.2, 1.2])
+with col_title:
+    st.markdown("## 비전 메이커 **v1.0**")
+    st.caption("스크립트를 고품질 AI 비주얼 프로덕션으로 즉시 전환하세요.")
 with col_btn1:
-    start_btn = st.button("🚀 이미지 생성 시작", type="primary", use_container_width=True)
+    split_only_btn = st.button("✂️ 장면 분할", use_container_width=True)
 with col_btn2:
-    reset_btn = st.button("🔄 초기화", use_container_width=True)
+    gen_btn = st.button("⚡ 일괄 생성", type="primary", use_container_width=True)
 
-if reset_btn:
-    for k in ["cuts","prompts","scenes","images","errors"]:
-        st.session_state[k] = []
-    st.session_state.step = 0
-    st.session_state.analysis = ""
-    st.rerun()
+st.markdown("---")
 
-def step_badge(label, status):
-    return f'<span class="step-badge step-{status}">{label}</span>'
+# 입력 영역 — 인트로 / 본문 2칸
+col_intro, col_body = st.columns(2)
+with col_intro:
+    st.markdown(f"**🎬 인트로 스크립트**")
+    intro_script = st.text_area(
+        "intro", label_visibility="collapsed", height=160,
+        placeholder="강렬한 도입부 스크립트를 여기에 붙여넣으세요...",
+        key="intro_input"
+    )
+    st.caption(f"⏱ 인트로 분할: {intro_seconds}s")
 
-if st.session_state.step > 0:
-    s = st.session_state.step
-    st.markdown("---")
-    c1,c2,c3,c4 = st.columns(4)
-    with c1: st.markdown(step_badge("1. 대본 분석","done" if s>=1 else "wait"), unsafe_allow_html=True)
-    with c2: st.markdown(step_badge("2. 초단위 분할","done" if s>=2 else ("active" if s==1 else "wait")), unsafe_allow_html=True)
-    with c3: st.markdown(step_badge("3. 프롬프트 생성","done" if s>=3 else ("active" if s==2 else "wait")), unsafe_allow_html=True)
-    with c4: st.markdown(step_badge("4. 이미지 생성","done" if s>=4 else ("active" if s==3 else "wait")), unsafe_allow_html=True)
+with col_body:
+    st.markdown(f"**📖 메인 본문 스크립트**")
+    body_script = st.text_area(
+        "body", label_visibility="collapsed", height=160,
+        placeholder="본문 내용을 여기에 입력하세요...",
+        key="body_input"
+    )
+    st.caption(f"⏱ 본문은 설정된 시간({body_seconds}s) 기준에 따라 분할됩니다.")
 
-if start_btn:
+# 프로젝트 제목
+project_title = st.text_input("프로젝트 통합 제목", placeholder="예: 삼성전자의 차세대 EV 배터리 전략 분석",
+                               label_visibility="visible")
+
+# ══════════════════════════════════════════════════════════════
+# 장면 분할만 (미리보기)
+# ══════════════════════════════════════════════════════════════
+if split_only_btn:
     if not api_key:
-        st.error("❌ 사이드바에서 Gemini API 키를 먼저 입력해주세요.")
+        st.error("API 키를 입력해주세요.")
         st.stop()
-    if not script.strip():
-        st.error("❌ 대본을 입력해주세요.")
+    if not intro_script.strip() and not body_script.strip():
+        st.error("스크립트를 입력해주세요.")
         st.stop()
-
-    st.session_state.cuts = []
-    st.session_state.prompts = []
-    st.session_state.images = []
-    st.session_state.errors = []
-    st.session_state.step = 0
-    st.session_state.analysis = ""
 
     client = genai.Client(api_key=api_key)
+    all_cuts, all_sections = [], []
 
-    # ── STEP 1: 대본 분석 ──────────────────────────────────────
-    with st.status("**1단계: 대본 분석 중...**", expanded=True) as s1:
-        try:
-            r = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=f"""아래 대본을 분석하고 한국어로 요약해주세요:
-1. 전체 주제 (한 줄)
-2. 핵심 메시지
-3. 주요 장면/행동 키워드 (시각화에 중요한 것들)
+    with st.spinner("장면 분할 중..."):
+        if intro_script.strip():
+            ic = split_semantic(client, intro_script.strip(), intro_seconds)
+            all_cuts += ic; all_sections += ["intro"] * len(ic)
+        if body_script.strip():
+            bc = split_semantic(client, body_script.strip(), body_seconds)
+            all_cuts += bc; all_sections += ["body"] * len(bc)
 
-대본:
-{script}""",
-                config=types.GenerateContentConfig(max_output_tokens=400, temperature=0.3)
-            )
-            st.session_state.analysis = r.text.strip()
-            st.session_state.step = 1
-            st.markdown(st.session_state.analysis)
-            s1.update(label="✅ 1단계: 대본 분석 완료", state="complete")
-        except Exception as e:
-            s1.update(label=f"❌ 대본 분석 실패: {e}", state="error")
-            st.stop()
-
-    # ── STEP 2: 의미 단위 분할 ─────────────────────────────────
-    with st.status("**2단계: 의미 단위 분할 중...**", expanded=True) as s2:
-        cuts = split_script_semantic(client, script, seconds_per_cut)
-        st.session_state.cuts = cuts
-        st.session_state.step = 2
-        st.write(f"📌 총 **{len(cuts)}개** 컷 (컷당 목표 {seconds_per_cut}초 / 의미 단위 기준)")
-        for i, cut in enumerate(cuts):
-            st.markdown(f"**컷 {i+1}** `{len(cut)}자` — {cut}")
-        s2.update(label=f"✅ 2단계: {len(cuts)}개 컷으로 분할 완료", state="complete")
-
-    # ── STEP 3: 프롬프트 생성 ──────────────────────────────────
-    prompts = []
-    scenes = []
-    with st.status("**3단계: 대본 → 이미지 프롬프트 변환 중...**", expanded=True) as s3:
-        prog3 = st.progress(0)
-        for i, cut in enumerate(cuts):
-            st.write(f"🖊 컷 {i+1}/{len(cuts)}: `{cut[:25]}...` → 장면 분석 중")
-            try:
-                prompt, scene = build_image_prompt(
-                    client, cut, style_prefix, language, i+1, len(cuts)
-                )
-                prompts.append(prompt)
-                scenes.append(scene)
-                st.caption(f"→ 장면: {scene[:80]}...")
-            except Exception as e:
-                scene = f"expressive characters in a scene related to: {cut[:60]}"
-                fallback = f"{style_prefix} SCENE: {scene}. {LANGUAGE_SETTINGS[language]}."
-                prompts.append(fallback)
-                scenes.append(scene)
-                st.session_state.errors.append(f"컷 {i+1} 프롬프트 오류: {e}")
-            prog3.progress((i+1)/len(cuts))
-            time.sleep(0.4)
-
-        st.session_state.prompts = prompts
-        st.session_state.scenes = scenes
-        st.session_state.step = 3
-        s3.update(label=f"✅ 3단계: {len(prompts)}개 프롬프트 생성 완료", state="complete")
-
-    # ── STEP 4: 이미지 생성 ────────────────────────────────────
-    images = [None]*len(cuts)
-    with st.status("**4단계: 이미지 생성 중 🍌...**", expanded=True) as s4:
-        prog4 = st.progress(0)
-        img_ph = st.empty()
-        for i, (cut, prompt) in enumerate(zip(cuts, prompts)):
-            st.write(f"🎨 컷 {i+1}/{len(cuts)} 이미지 생성 중...")
-            try:
-                img = generate_image(client, prompt, cut, language)
-                images[i] = img
-                if img:
-                    img_ph.image(img, caption=f"컷 {i+1}: {cut[:30]}...", width=320)
-            except Exception as e:
-                st.session_state.errors.append(f"컷 {i+1} 이미지 오류: {e}")
-                st.warning(f"⚠️ 컷 {i+1} 실패: {e}")
-            prog4.progress((i+1)/len(cuts))
-            time.sleep(0.5)
-
-        img_ph.empty()
-        st.session_state.images = images
-        st.session_state.step = 4
-        ok = sum(1 for img in images if img is not None)
-        s4.update(label=f"✅ 4단계: {ok}/{len(cuts)}개 이미지 생성 완료", state="complete")
-
+    st.session_state.cuts = all_cuts
+    st.session_state.sections = all_sections
+    st.session_state.prompts  = [None]*len(all_cuts)
+    st.session_state.scenes   = [None]*len(all_cuts)
+    st.session_state.images   = [None]*len(all_cuts)
+    st.session_state.styles   = [style_prefix]*len(all_cuts)
+    st.session_state.step = 1
     st.rerun()
 
-# ── 결과 출력 ──────────────────────────────────────────────────
-if st.session_state.step == 4 and st.session_state.cuts:
-    st.markdown("---")
-    st.markdown("## 🎉 생성 결과")
+# ══════════════════════════════════════════════════════════════
+# 일괄 생성
+# ══════════════════════════════════════════════════════════════
+if gen_btn:
+    if not api_key:
+        st.error("API 키를 입력해주세요.")
+        st.stop()
+    if not intro_script.strip() and not body_script.strip():
+        st.error("스크립트를 입력해주세요.")
+        st.stop()
 
-    if st.session_state.errors:
-        with st.expander(f"⚠️ 오류 {len(st.session_state.errors)}건"):
-            for err in st.session_state.errors:
-                st.caption(err)
+    client = genai.Client(api_key=api_key)
+    st.session_state.errors = []
 
-    cuts    = st.session_state.cuts
-    prompts = st.session_state.prompts
-    scenes  = st.session_state.get("scenes", [""] * len(cuts))
-    images  = st.session_state.images
+    # 분할
+    all_cuts, all_sections = [], []
+    with st.spinner("✂️ 장면 분할 중..."):
+        if intro_script.strip():
+            ic = split_semantic(client, intro_script.strip(), intro_seconds)
+            all_cuts += ic; all_sections += ["intro"] * len(ic)
+        if body_script.strip():
+            bc = split_semantic(client, body_script.strip(), body_seconds)
+            all_cuts += bc; all_sections += ["body"] * len(bc)
 
-    for row_start in range(0, len(cuts), 3):
-        row_items = list(enumerate(cuts[row_start:row_start+3], start=row_start))
-        cols = st.columns(len(row_items))
-        for col, (i, cut) in zip(cols, row_items):
-            with col:
-                st.markdown(f"**컷 {i+1}**")
-                if images[i] is not None:
-                    st.image(images[i], use_container_width=True)
-                    buf = io.BytesIO()
-                    images[i].save(buf, format="PNG")
-                    st.download_button(
-                        f"💾 컷{i+1} 저장", buf.getvalue(),
-                        f"cut_{i+1:02d}.png", "image/png", key=f"dl_{i}"
-                    )
-                else:
-                    st.warning("생성 실패")
-                # 대본 원문
-                st.caption(f"📝 대본: {cut}")
-                # 장면 해석 (중간 단계 투명하게 보여줌)
-                if i < len(scenes) and scenes[i]:
-                    with st.expander("🎬 장면 해석 보기"):
-                        st.write(scenes[i])
-                # 전체 프롬프트
-                if i < len(prompts):
-                    with st.expander("🔍 전체 프롬프트 보기"):
-                        st.code(prompts[i], language="text")
+    n = len(all_cuts)
+    st.session_state.cuts     = all_cuts
+    st.session_state.sections = all_sections
+    st.session_state.prompts  = [None]*n
+    st.session_state.scenes   = [None]*n
+    st.session_state.images   = [None]*n
+    st.session_state.styles   = [style_prefix]*n
+    st.session_state.step     = 2
 
-    if any(img is not None for img in images):
-        import zipfile
+    # 병렬 프롬프트 생성
+    prompts_out = [None]*n
+    scenes_out  = [None]*n
+    prog = st.progress(0, text="📝 프롬프트 생성 중...")
+
+    def _make_prompt(args):
+        i, cut = args
+        try:
+            p, sc = build_prompt(client, cut, style_prefix, character_b64, language, i+1, n)
+        except Exception as e:
+            sc = cut[:60]
+            p  = f"{style_prefix} SCENE: {sc}. {LANGUAGE_SETTINGS[language]}."
+            st.session_state.errors.append(f"컷{i+1} 프롬프트 오류: {e}")
+        return i, p, sc
+
+    done = [0]
+    with ThreadPoolExecutor(max_workers=parallel_workers) as ex:
+        futs = {ex.submit(_make_prompt, (i, c)): i for i, c in enumerate(all_cuts)}
+        for fut in as_completed(futs):
+            i, p, sc = fut.result()
+            prompts_out[i] = p; scenes_out[i] = sc
+            done[0] += 1
+            prog.progress(done[0]/n, text=f"📝 프롬프트 생성 중... {done[0]}/{n}")
+
+    st.session_state.prompts = prompts_out
+    st.session_state.scenes  = scenes_out
+
+    # 병렬 이미지 생성
+    images_out = [None]*n
+    prog2 = st.progress(0, text="🎨 이미지 생성 중...")
+    done2 = [0]
+
+    def _make_image(args):
+        i, cut, prompt = args
+        try:
+            img = generate_image(client, prompt, cut, character_b64, language)
+        except Exception as e:
+            st.session_state.errors.append(f"컷{i+1} 이미지 오류: {e}")
+            img = None
+        return i, img
+
+    with ThreadPoolExecutor(max_workers=min(parallel_workers, 4)) as ex:
+        futs2 = {ex.submit(_make_image, (i, c, p)): i
+                 for i, (c, p) in enumerate(zip(all_cuts, prompts_out))}
+        for fut in as_completed(futs2):
+            i, img = fut.result()
+            images_out[i] = img
+            done2[0] += 1
+            prog2.progress(done2[0]/n, text=f"🎨 이미지 생성 중... {done2[0]}/{n}")
+
+    st.session_state.images = images_out
+    st.session_state.step   = 3
+    st.rerun()
+
+# ══════════════════════════════════════════════════════════════
+# 재생성 처리
+# ══════════════════════════════════════════════════════════════
+if st.session_state.regen_idx is not None and api_key:
+    idx = st.session_state.regen_idx
+    st.session_state.regen_idx = None
+    client = genai.Client(api_key=api_key)
+    with st.spinner(f"컷 {idx+1} 재생성 중..."):
+        regen_single(client, idx, style_prefix, character_b64, language)
+    st.rerun()
+
+# ══════════════════════════════════════════════════════════════
+# 결과 출력
+# ══════════════════════════════════════════════════════════════
+cuts     = st.session_state.cuts
+sections = st.session_state.sections
+prompts  = st.session_state.prompts
+scenes   = st.session_state.scenes
+images   = st.session_state.images
+
+if st.session_state.step >= 1 and cuts:
+
+    # 분할 미리보기 (이미지 없을 때)
+    if st.session_state.step == 1:
+        st.success(f"✂️ 총 {len(cuts)}개 씬으로 분할됨 — '⚡ 일괄 생성' 버튼으로 이미지를 생성하세요.")
+        n_intro = sum(1 for s in sections if s=="intro")
+        st.caption(f"🎬 인트로 {n_intro}컷 + 📖 본문 {len(cuts)-n_intro}컷")
+        for i, (cut, sec) in enumerate(zip(cuts, sections)):
+            badge = "intro" if sec=="intro" else "body"
+            label = f"{'🎬' if sec=='intro' else '📖'} SCENE {i+1}"
+            st.markdown(f'<div class="scene-card"><div class="scene-header"><span>{label}</span><span class="{badge}-badge">{"인트로" if sec=="intro" else "본문"}</span></div><div class="scene-script">{cut}</div></div>', unsafe_allow_html=True)
+
+    # 이미지 결과
+    if st.session_state.step >= 3:
+        ok = sum(1 for img in images if img is not None)
+        st.success(f"✅ {ok}/{len(cuts)}개 생성 완료")
+
+        if st.session_state.errors:
+            with st.expander(f"⚠️ 오류 {len(st.session_state.errors)}건"):
+                for e in st.session_state.errors: st.caption(e)
+
+        # ZIP 다운로드
         zip_buf = io.BytesIO()
-        with zipfile.ZipFile(zip_buf, "w") as zf:
+        with zipfile.ZipFile(zip_buf,"w") as zf:
             for i, img in enumerate(images):
-                if img is not None:
-                    b = io.BytesIO()
-                    img.save(b, format="PNG")
-                    zf.writestr(f"cut_{i+1:02d}.png", b.getvalue())
+                if img:
+                    b = io.BytesIO(); img.save(b, format="PNG")
+                    zf.writestr(f"scene_{i+1:02d}.png", b.getvalue())
+        st.download_button("📦 생성된 모든 이미지 .ZIP 다운로드",
+                           zip_buf.getvalue(), "vision_maker.zip",
+                           "application/zip", type="primary", use_container_width=True)
+
         st.markdown("---")
 
-        col_zip, col_save = st.columns([1, 1])
-        with col_zip:
-            st.download_button(
-                "📦 전체 이미지 ZIP 다운로드",
-                zip_buf.getvalue(), "stickman_cuts.zip",
-                "application/zip", type="primary"
-            )
-        with col_save:
-            # 라이브러리에 저장할 데이터 준비 (이미지는 base64로 직렬화)
-            import base64 as b64mod, json, datetime
-            save_title = st.text_input("저장 제목", value=script[:20].strip() + "...", key="save_title")
-            if st.button("📚 라이브러리에 저장", type="secondary"):
-                items = []
-                for i, (cut, img) in enumerate(zip(cuts, images)):
-                    img_b64 = ""
-                    if img is not None:
-                        buf2 = io.BytesIO()
-                        img.save(buf2, format="PNG")
-                        img_b64 = b64mod.b64encode(buf2.getvalue()).decode()
-                    items.append({"cut": cut, "img": img_b64, "scene": scenes[i] if i < len(scenes) else ""})
+        # 씬 카드 목록
+        n_intro = sum(1 for s in sections if s=="intro")
+        if n_intro > 0:
+            st.markdown("### 🎬 인트로")
 
-                entry = {
-                    "id": str(int(datetime.datetime.now().timestamp() * 1000)),
-                    "title": save_title,
-                    "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "expire": (datetime.datetime.now() + datetime.timedelta(days=2)).timestamp(),
-                    "items": items,
-                }
-                # JS로 localStorage에 저장
-                entry_json = json.dumps(entry, ensure_ascii=False)
-                st.components.v1.html(f"""
-<script>
-(function() {{
-    var key = 'imggen_library';
-    var existing = JSON.parse(localStorage.getItem(key) || '[]');
-    // 만료된 항목 제거
-    var now = Date.now() / 1000;
-    existing = existing.filter(function(e) {{ return e.expire > now; }});
-    existing.unshift({entry_json});
-    localStorage.setItem(key, JSON.stringify(existing));
-    // 저장 완료 알림
-    var msg = document.createElement('div');
-    msg.style.cssText = 'background:#d4edda;color:#155724;padding:12px 18px;border-radius:8px;font-weight:600;font-size:14px;';
-    msg.textContent = '✅ 라이브러리에 저장됐습니다! (48시간 후 자동 삭제)';
-    document.body.appendChild(msg);
-    setTimeout(function() {{ msg.remove(); }}, 3000);
-}})();
-</script>
-""", height=50)
-                st.success("✅ 라이브러리에 저장됐습니다! 아래 📚 라이브러리 탭에서 확인하세요.")
+        for i, (cut, sec) in enumerate(zip(cuts, sections)):
+            if sec == "body" and i == n_intro and n_intro > 0:
+                st.markdown("### 📖 본문")
 
-# ── 라이브러리 ──────────────────────────────────────────────────
-st.markdown("---")
-st.markdown("## 📚 라이브러리")
-st.caption("저장된 작업물이 여기 표시됩니다. 48시간 후 자동 삭제됩니다.")
+            badge_cls  = "intro-badge" if sec=="intro" else "body-badge"
+            badge_text = "인트로" if sec=="intro" else "본문"
+            scene_label = f"SCENE {i+1}"
 
-# localStorage에서 라이브러리 불러오기 + 표시
-import streamlit.components.v1 as components
-import json
+            col_img, col_info = st.columns([1, 1.3])
 
-# JS → Python 통신: localStorage 데이터를 query param으로 넘기는 방식
-library_html = """
-<style>
-  body { font-family: sans-serif; margin: 0; background: transparent; }
-  .lib-empty { color: #999; font-size: 13px; padding: 8px 0; }
-  .lib-item {
-    border: 1px solid #e0e0e0; border-radius: 10px;
-    padding: 12px 16px; margin-bottom: 10px;
-    background: #fafafa; cursor: pointer;
-  }
-  .lib-item:hover { background: #f0f4ff; border-color: #aac; }
-  .lib-title { font-weight: 600; font-size: 14px; color: #333; }
-  .lib-meta  { font-size: 12px; color: #888; margin-top: 2px; }
-  .lib-del   { float: right; background: none; border: none;
-               color: #cc4444; cursor: pointer; font-size: 13px; }
-  .lib-imgs  { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-  .lib-imgs img { width: 90px; height: 90px; object-fit: cover;
-                  border-radius: 6px; border: 1px solid #ddd; }
-  .lib-cut   { font-size: 11px; color: #555; text-align: center;
-               width: 90px; overflow: hidden; white-space: nowrap;
-               text-overflow: ellipsis; }
-  .expanded  { background: #f0f4ff !important; }
-</style>
+            with col_img:
+                if images[i]:
+                    st.image(images[i], use_container_width=True)
+                    buf = io.BytesIO(); images[i].save(buf, format="PNG")
+                    st.download_button(f"⬇️ 다운로드", buf.getvalue(),
+                                       f"scene_{i+1:02d}.png", "image/png",
+                                       key=f"dl_{i}", use_container_width=True)
+                else:
+                    st.warning("생성 실패")
 
-<div id="library"></div>
+            with col_info:
+                st.markdown(f'<div class="scene-header"><span class="status-done">✅ 완성</span> &nbsp; <span class="{badge_cls}">{badge_text}</span> &nbsp; <b>{scene_label}</b></div>', unsafe_allow_html=True)
+                st.markdown("📄 **SCRIPT**")
+                st.markdown(f'<div class="scene-script">{cut}</div>', unsafe_allow_html=True)
 
-<script>
-(function() {
-  var key = 'imggen_library';
-  var container = document.getElementById('library');
+                if scenes[i]:
+                    with st.expander("🎬 장면 해석"):
+                        st.write(scenes[i])
+                if prompts[i]:
+                    with st.expander("🔍 프롬프트"):
+                        st.code(prompts[i], language="text")
 
-  function render() {
-    var raw = localStorage.getItem(key) || '[]';
-    var items;
-    try { items = JSON.parse(raw); } catch(e) { items = []; }
-    // 만료 제거
-    var now = Date.now() / 1000;
-    items = items.filter(function(e) { return e.expire > now; });
-    localStorage.setItem(key, JSON.stringify(items));
+                if st.button("🔄 다시 생성", key=f"regen_{i}", use_container_width=True):
+                    st.session_state.regen_idx = i
+                    st.rerun()
 
-    container.innerHTML = '';
-    if (items.length === 0) {
-      container.innerHTML = '<div class="lib-empty">저장된 항목이 없습니다.<br>생성 후 "📚 라이브러리에 저장" 버튼을 눌러주세요.</div>';
-      return;
-    }
+            st.markdown("---")
 
-    items.forEach(function(entry, idx) {
-      var card = document.createElement('div');
-      card.className = 'lib-item';
-      var expire = new Date(entry.expire * 1000);
-      var expireStr = expire.getMonth()+1 + '/' + expire.getDate() + ' ' + expire.getHours() + ':' + String(expire.getMinutes()).padStart(2,'0') + ' 까지';
-      var cutCount = (entry.items || []).length;
+# ══════════════════════════════════════════════════════════════
+# 라이브러리 (localStorage)
+# ══════════════════════════════════════════════════════════════
+if st.session_state.step >= 3 and cuts:
+    st.markdown("---")
+    st.markdown("### 💾 라이브러리에 저장")
+    save_title = st.text_input("저장 제목",
+        value=(project_title.strip() or (cuts[0][:20] if cuts else "작업")) + "...",
+        key="save_title_input")
 
-      card.innerHTML =
-        '<button class="lib-del" data-idx="' + idx + '">🗑 삭제</button>' +
-        '<div class="lib-title">' + escHtml(entry.title) + '</div>' +
-        '<div class="lib-meta">' + entry.date + ' · ' + cutCount + '컷 · ⏳ ' + expireStr + '</div>';
-
-      // 이미지 미리보기 (처음에는 숨김)
-      var imgArea = document.createElement('div');
-      imgArea.className = 'lib-imgs';
-      imgArea.style.display = 'none';
-      (entry.items || []).forEach(function(item) {
-        var wrap = document.createElement('div');
-        if (item.img) {
-          var img = document.createElement('img');
-          img.src = 'data:image/png;base64,' + item.img;
-          wrap.appendChild(img);
+    if st.button("📚 라이브러리에 저장 (48시간)", type="secondary"):
+        items = []
+        for i, (cut, img) in enumerate(zip(cuts, images)):
+            img_b64 = ""
+            if img:
+                buf = io.BytesIO(); img.save(buf, format="PNG")
+                img_b64 = base64.b64encode(buf.getvalue()).decode()
+            items.append({"cut": cut, "img": img_b64,
+                           "section": sections[i] if i < len(sections) else "body"})
+        entry = {
+            "id": str(int(datetime.datetime.now().timestamp()*1000)),
+            "title": save_title,
+            "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "expire": (datetime.datetime.now()+datetime.timedelta(days=2)).timestamp(),
+            "items": items,
         }
-        var cap = document.createElement('div');
-        cap.className = 'lib-cut';
-        cap.textContent = item.cut;
-        wrap.appendChild(cap);
-        imgArea.appendChild(wrap);
+        entry_json = json.dumps(entry, ensure_ascii=False)
+        st.components.v1.html(f"""<script>
+(function(){{
+  var key='imggen_library';
+  var arr=JSON.parse(localStorage.getItem(key)||'[]');
+  var now=Date.now()/1000;
+  arr=arr.filter(function(e){{return e.expire>now;}});
+  arr.unshift({entry_json});
+  localStorage.setItem(key,JSON.stringify(arr));
+  var d=document.createElement('div');
+  d.style.cssText='background:#d4edda;color:#155724;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:600;';
+  d.textContent='✅ 라이브러리에 저장됐습니다! (48시간 후 자동 삭제)';
+  document.body.appendChild(d);
+  setTimeout(function(){{d.remove();}},3000);
+}})();
+</script>""", height=50)
+        st.success("✅ 저장 완료!")
+
+st.markdown("---")
+st.markdown("### 📚 라이브러리")
+st.caption("저장된 작업물 — 클릭하면 펼쳐집니다. 48시간 후 자동 삭제.")
+
+st.components.v1.html("""
+<style>
+  body{font-family:sans-serif;margin:0;background:transparent;}
+  .li{border:1px solid #e0e0e0;border-radius:10px;padding:12px 16px;margin-bottom:8px;background:#fafafa;cursor:pointer;}
+  .li:hover{background:#f0f4ff;}
+  .lt{font-weight:600;font-size:13px;color:#333;}
+  .lm{font-size:11px;color:#888;margin-top:2px;}
+  .ld{float:right;background:none;border:none;color:#cc4444;cursor:pointer;font-size:12px;}
+  .imgs{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
+  .imgs img{width:85px;height:85px;object-fit:cover;border-radius:6px;border:1px solid #ddd;}
+  .icap{font-size:10px;color:#555;text-align:center;width:85px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+  .ibadge{font-size:9px;border-radius:8px;padding:1px 5px;background:#fff3cd;color:#856404;}
+  .ibadge.body{background:#d1ecf1;color:#0c5460;}
+</style>
+<div id="lib"></div>
+<script>
+(function(){
+  var key='imggen_library';
+  var el=document.getElementById('lib');
+  function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  function render(){
+    var arr;try{arr=JSON.parse(localStorage.getItem(key)||'[]');}catch(e){arr=[];}
+    var now=Date.now()/1000;
+    arr=arr.filter(function(e){return e.expire>now;});
+    localStorage.setItem(key,JSON.stringify(arr));
+    el.innerHTML='';
+    if(!arr.length){el.innerHTML='<div style="color:#aaa;font-size:12px;padding:8px 0;">저장된 항목이 없습니다.</div>';return;}
+    arr.forEach(function(entry,idx){
+      var card=document.createElement('div');card.className='li';
+      var exp=new Date(entry.expire*1000);
+      var expStr=(exp.getMonth()+1)+'/'+exp.getDate()+' '+exp.getHours()+':'+String(exp.getMinutes()).padStart(2,'0')+' 까지';
+      card.innerHTML='<button class="ld" data-i="'+idx+'">🗑</button>'
+        +'<div class="lt">'+esc(entry.title)+'</div>'
+        +'<div class="lm">'+entry.date+' · '+(entry.items||[]).length+'컷 · ⏳'+expStr+'</div>';
+      var imgArea=document.createElement('div');imgArea.className='imgs';imgArea.style.display='none';
+      (entry.items||[]).forEach(function(item){
+        var w=document.createElement('div');
+        if(item.img){var im=document.createElement('img');im.src='data:image/png;base64,'+item.img;w.appendChild(im);}
+        var cap=document.createElement('div');cap.className='icap';cap.textContent=item.cut;w.appendChild(cap);
+        var badge=document.createElement('div');
+        badge.className='ibadge'+(item.section==='body'?' body':'');
+        badge.textContent=item.section==='intro'?'인트로':'본문';
+        w.appendChild(badge);
+        imgArea.appendChild(w);
       });
       card.appendChild(imgArea);
-
-      // 클릭 시 펼치기/접기
-      card.addEventListener('click', function(e) {
-        if (e.target.classList.contains('lib-del')) return;
-        var visible = imgArea.style.display !== 'none';
-        imgArea.style.display = visible ? 'none' : 'flex';
-        card.classList.toggle('expanded', !visible);
+      card.addEventListener('click',function(e){
+        if(e.target.classList.contains('ld'))return;
+        imgArea.style.display=imgArea.style.display==='none'?'flex':'none';
       });
-
-      // 삭제 버튼
-      card.querySelector('.lib-del').addEventListener('click', function(e) {
+      card.querySelector('.ld').addEventListener('click',function(e){
         e.stopPropagation();
-        var i = parseInt(this.getAttribute('data-idx'));
-        var current = JSON.parse(localStorage.getItem(key) || '[]');
-        current.splice(i, 1);
-        localStorage.setItem(key, JSON.stringify(current));
-        render();
+        var arr2=JSON.parse(localStorage.getItem(key)||'[]');
+        arr2.splice(parseInt(this.getAttribute('data-i')),1);
+        localStorage.setItem(key,JSON.stringify(arr2));render();
       });
-
-      container.appendChild(card);
+      el.appendChild(card);
     });
   }
-
-  function escHtml(str) {
-    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  }
-
   render();
 })();
 </script>
-"""
+""", height=380, scrolling=True)
 
-components.html(library_html, height=420, scrolling=True)
 
 
 if st.session_state.step == 0:
