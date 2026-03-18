@@ -6,7 +6,7 @@ from PIL import Image
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ── 페이지 설정 ────────────────────────────────────────────────
-st.set_page_config(page_title="비전 메이커", page_icon="🎬", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="딩푸수 메이커", page_icon="🎬", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
