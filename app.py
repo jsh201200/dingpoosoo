@@ -6,7 +6,7 @@ from PIL import Image
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ── 페이지 설정 ────────────────────────────────────────────────
-st.set_page_config(page_title="딩푸수 메이커", page_icon="🎬", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="비전 메이커", page_icon="🎬", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
@@ -139,27 +139,60 @@ for k, v in [("cuts",[]),("sections",[]),("styles",[]),("prompts",[]),
 def chars_per_second(s): return round(s * 4.5)
 
 def split_semantic(client, script, seconds):
-    est = max(3, round(len(script) / chars_per_second(seconds)))
+    """대본을 의미 단위로 분할. 긴 대본은 문장 단위로 청크 분할 후 합침."""
+    chars = chars_per_second(seconds)
+    est = max(3, round(len(script) / chars))
+
+    # 대본이 길면 (예상 컷 15개 초과) 청크로 나눠서 각각 분할 후 합침
+    if est > 15:
+        # 문장 단위로 분리
+        sentences = re.split(r'(?<=[.!?。])\s+', script.strip())
+        # 청크당 약 10컷 분량으로 묶기
+        chunk_size_chars = chars * 10
+        chunks, current_chunk = [], ""
+        for sent in sentences:
+            if len(current_chunk) + len(sent) < chunk_size_chars:
+                current_chunk += (" " if current_chunk else "") + sent
+            else:
+                if current_chunk:
+                    chunks.append(current_chunk)
+                current_chunk = sent
+        if current_chunk:
+            chunks.append(current_chunk)
+
+        all_cuts = []
+        for chunk in chunks:
+            all_cuts.extend(_split_single(client, chunk, seconds))
+        return all_cuts if all_cuts else [script]
+
+    return _split_single(client, script, seconds)
+
+
+def _split_single(client, script, seconds):
+    """단일 청크를 Gemini로 분할."""
+    chars = chars_per_second(seconds)
+    est = max(3, round(len(script) / chars))
     r = client.models.generate_content(
         model="gemini-2.5-flash",
-        contents=f"""아래 대본을 이미지 컷 단위로 분할하세요.
+        contents=f"""아래 대본을 이미지 컷 단위로 빠짐없이 분할하세요.
 
 규칙:
-- 한 컷 = 약 {seconds}초 = 약 {chars_per_second(seconds)}글자
-- 예상 컷 수: 약 {est}개 (이 숫자에 맞춰 분할할 것)
+- 한 컷 = 약 {seconds}초 = 약 {chars}글자
+- 예상 컷 수: 약 {est}개 — 반드시 이 숫자에 맞게 분할할 것
+- 대본의 처음부터 끝까지 단 한 글자도 빠뜨리지 말 것
 - 각 문장/절은 별도 컷으로 — 여러 문장을 하나로 뭉치지 말 것
-- 문장 중간에서 자르지 말 것
+- 문장 중간에서 자르지 말 것 (마침표/느낌표/물음표 단위)
 - 5글자 미만만 앞뒤와 합치기
-- 번호. 내용 형식으로만 출력 (설명 없이)
+- 번호. 내용 형식으로만 출력 (설명, 주석 없이)
 
 출력:
 1. [내용]
 2. [내용]
 ...
 
-대본:
+대본 (처음부터 끝까지 전부 분할):
 {script}""",
-        config=types.GenerateContentConfig(temperature=0.1, max_output_tokens=2000)
+        config=types.GenerateContentConfig(temperature=0.1, max_output_tokens=3000)
     )
     cuts = []
     for line in r.text.strip().split("\n"):
@@ -167,7 +200,6 @@ def split_semantic(client, script, seconds):
         if m and m.group(1).strip():
             cuts.append(m.group(1).strip())
     if not cuts:
-        # fallback: 줄바꿈 기준
         cuts = [l.strip() for l in script.split("\n") if l.strip()]
     return cuts
 
@@ -226,13 +258,19 @@ QUALITY STANDARDS (match professional editorial illustration):
     return full, scene
 
 
-def generate_image(client, prompt, cut, character_b64, language):
+def generate_image(client, prompt, cut, character_b64, language, aspect_ratio="1:1"):
     lang = LANGUAGE_SETTINGS[language]
 
-    # 이미지 모델용 최종 프롬프트 — 강화된 지시
+    ratio_instruction = {
+        "16:9": "Generate this as a WIDE LANDSCAPE image (16:9 aspect ratio, horizontal composition, cinematic widescreen format).",
+        "1:1":  "Generate this as a SQUARE image (1:1 aspect ratio, balanced centered composition).",
+        "9:16": "Generate this as a TALL PORTRAIT image (9:16 aspect ratio, vertical composition optimized for mobile/shorts).",
+    }.get(aspect_ratio, "")
+
     final = (
         f"{prompt}\n\n"
         f"ADDITIONAL REQUIREMENTS:\n"
+        f"- {ratio_instruction}\n"
         f"- Draw the EXACT scene described with high detail and cinematic quality\n"
         f"- The scene must clearly represent: '{cut[:80]}'\n"
         f"- Include rich background details, dramatic lighting, and expressive characters\n"
@@ -270,11 +308,11 @@ def generate_image(client, prompt, cut, character_b64, language):
             return Image.open(io.BytesIO(data))
     return None
 
-def regen_single(client, i, style_prefix, character_b64, language):
+def regen_single(client, i, style_prefix, character_b64, language, aspect_ratio="1:1"):
     cut = st.session_state.cuts[i]
     try:
         p, sc = build_prompt(client, cut, style_prefix, character_b64, language, i+1, len(st.session_state.cuts))
-        img = generate_image(client, p, cut, character_b64, language)
+        img = generate_image(client, p, cut, character_b64, language, aspect_ratio)
         st.session_state.prompts[i] = p
         st.session_state.scenes[i]  = sc
         st.session_state.images[i]  = img
@@ -336,6 +374,20 @@ with st.sidebar:
     # 출력 언어
     st.markdown("### 🌐 출력 언어")
     language = st.selectbox("언어", list(LANGUAGE_SETTINGS.keys()), label_visibility="collapsed")
+    st.divider()
+
+    # 이미지 사이즈
+    st.markdown("### 📐 이미지 비율")
+    aspect_ratio = st.radio(
+        "비율 선택",
+        options=["16:9", "1:1", "9:16"],
+        index=1,
+        horizontal=True,
+        label_visibility="collapsed",
+        help="16:9 유튜브 썸네일 · 1:1 SNS · 9:16 쇼츠/릴스"
+    )
+    ratio_labels = {"16:9": "🖥 유튜브 썸네일", "1:1": "📷 SNS 정방형", "9:16": "📱 쇼츠/릴스"}
+    st.caption(ratio_labels[aspect_ratio])
     st.divider()
 
     # 병렬 작업
@@ -454,17 +506,19 @@ if gen_btn:
         i, cut = args
         try:
             p, sc = build_prompt(client, cut, style_prefix, character_b64, language, i+1, n)
+            return i, p, sc, None
         except Exception as e:
             sc = cut[:60]
             p  = f"{style_prefix} SCENE: {sc}. {LANGUAGE_SETTINGS[language]}."
-            st.session_state.errors.append(f"컷{i+1} 프롬프트 오류: {e}")
-        return i, p, sc
+            return i, p, sc, str(e)
 
     done = [0]
     with ThreadPoolExecutor(max_workers=parallel_workers) as ex:
         futs = {ex.submit(_make_prompt, (i, c)): i for i, c in enumerate(all_cuts)}
         for fut in as_completed(futs):
-            i, p, sc = fut.result()
+            i, p, sc, err = fut.result()
+            if err:
+                st.session_state.errors.append(f"컷{i+1} 프롬프트 오류: {err}")
             prompts_out[i] = p; scenes_out[i] = sc
             done[0] += 1
             prog.progress(done[0]/n, text=f"📝 프롬프트 생성 중... {done[0]}/{n}")
@@ -472,31 +526,57 @@ if gen_btn:
     st.session_state.prompts = prompts_out
     st.session_state.scenes  = scenes_out
 
-    # 병렬 이미지 생성
-    images_out = [None]*n
+    # 이미지 생성 — 완료되는 순서대로 실시간 표시
+    images_out = [None] * n
+    st.session_state.images = images_out  # 빈 상태로 먼저 저장
+    st.session_state.step = 3
+    st.session_state.cuts = all_cuts
+    st.session_state.sections = all_sections
+
     prog2 = st.progress(0, text="🎨 이미지 생성 중...")
     done2 = [0]
+    lock = __import__("threading").Lock()
+
+    # 미리보기 placeholder — 컷 순서대로 배치
+    st.markdown("**🎨 생성 중... (완료된 컷부터 순서대로 표시)**")
+    placeholders = []
+    # 2열 그리드로 placeholder 생성
+    for row_start in range(0, n, 2):
+        cols = st.columns(2)
+        for j, col in enumerate(cols):
+            idx_p = row_start + j
+            if idx_p < n:
+                with col:
+                    ph = st.empty()
+                    ph.markdown(f"⏳ 컷 {idx_p+1} 생성 대기 중...")
+                    placeholders.append(ph)
 
     def _make_image(args):
         i, cut, prompt = args
         try:
-            img = generate_image(client, prompt, cut, character_b64, language)
+            img = generate_image(client, prompt, cut, character_b64, language, aspect_ratio)
+            return i, img, None  # (index, image, error)
         except Exception as e:
-            st.session_state.errors.append(f"컷{i+1} 이미지 오류: {e}")
-            img = None
-        return i, img
+            return i, None, str(e)  # 에러를 반환값으로 전달
 
     with ThreadPoolExecutor(max_workers=min(parallel_workers, 4)) as ex:
         futs2 = {ex.submit(_make_image, (i, c, p)): i
                  for i, (c, p) in enumerate(zip(all_cuts, prompts_out))}
         for fut in as_completed(futs2):
-            i, img = fut.result()
+            i, img, err = fut.result()
+            if err:
+                st.session_state.errors.append(f"컷{i+1} 이미지 오류: {err}")
             images_out[i] = img
-            done2[0] += 1
-            prog2.progress(done2[0]/n, text=f"🎨 이미지 생성 중... {done2[0]}/{n}")
+            with lock:
+                done2[0] += 1
+                prog2.progress(done2[0] / n, text=f"🎨 이미지 생성 중... {done2[0]}/{n} 완료")
+            if i < len(placeholders):
+                if img:
+                    placeholders[i].image(img, caption=f"✅ 컷 {i+1}: {all_cuts[i][:25]}...", use_container_width=True)
+                else:
+                    placeholders[i].warning(f"❌ 컷 {i+1} 생성 실패")
 
     st.session_state.images = images_out
-    st.session_state.step   = 3
     st.rerun()
 
 # ══════════════════════════════════════════════════════════════
@@ -507,7 +587,7 @@ if st.session_state.regen_idx is not None and api_key:
     st.session_state.regen_idx = None
     client = genai.Client(api_key=api_key)
     with st.spinner(f"컷 {idx+1} 재생성 중..."):
-        regen_single(client, idx, style_prefix, character_b64, language)
+        regen_single(client, idx, style_prefix, character_b64, language, aspect_ratio)
     st.rerun()
 
 # ══════════════════════════════════════════════════════════════
@@ -707,6 +787,7 @@ st.components.v1.html("""
 })();
 </script>
 """, height=380, scrolling=True)
+
 
 
 
