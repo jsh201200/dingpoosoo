@@ -119,10 +119,10 @@ STYLE_PRESETS = {
 
 
 LANGUAGE_SETTINGS = {
-    "언어 없음": "absolutely no text, no letters, no words, no numbers anywhere in the image",
-    "한국어": "Korean text allowed on signs or labels, minimal",
-    "일본어": "Japanese text allowed on signs or labels, minimal",
-    "영어": "English text allowed on signs or labels, minimal",
+    "언어 없음": "NO text, letters, words, or numbers anywhere in the image.",
+    "한국어": "MINIMAL Korean text only — maximum 1~2 short words on signs or key visual elements if absolutely essential to the scene. Default to NO text unless critical.",
+    "일본어": "MINIMAL Japanese text only — maximum 1~2 short words if absolutely essential. Default to NO text.",
+    "영어": "MINIMAL English text only — maximum 1~2 short words if absolutely essential. Default to NO text.",
 }
 
 # ── 세션 초기화 ────────────────────────────────────────────────
@@ -142,185 +142,173 @@ def chars_per_second(s, tts_speed=1.0):
     return round(s * 4.5 * tts_speed)
 
 def split_semantic(client, script, seconds, tts_speed=1.2):
-    """대본을 의미 단위로 분할. 긴 대본은 청크로 나눠서 합침."""
+    """
+    대본 전체를 의미 단위로 분할.
+    - 청크 분할 없이 전체를 한 번에 처리 (누락 방지)
+    - 잘린 경우 나머지를 1회 보완
+    """
     chars = chars_per_second(seconds, tts_speed)
-    est = max(3, round(len(script) / chars))
+    est   = max(3, round(len(script) / chars))
 
-    if est > 15:
-        sentences = re.split(r'(?<=[.!?。])\s+', script.strip())
-        chunk_size_chars = chars * 10
-        chunks, current_chunk = [], ""
-        for sent in sentences:
-            if len(current_chunk) + len(sent) < chunk_size_chars:
-                current_chunk += (" " if current_chunk else "") + sent
-            else:
-                if current_chunk:
-                    chunks.append(current_chunk)
-                current_chunk = sent
-        if current_chunk:
-            chunks.append(current_chunk)
+    # Gemini에게 전체 대본을 한 번에 주고 분할 요청
+    result = _call_split_api(client, script, seconds, chars, est)
 
-        all_cuts = []
-        for chunk in chunks:
-            all_cuts.extend(_split_single(client, chunk, seconds, tts_speed))
-        return all_cuts if all_cuts else [script]
+    if not result:
+        # API 실패 → 문장 단위 fallback
+        return _fallback_split(script, chars)
 
-    return _split_single(client, script, seconds, tts_speed)
+    # ── 잘림 보완: 예상 컷 수 대비 80% 미만이면 나머지 추가 분할 ──
+    if len(result) < est * 0.8:
+        # 마지막 컷 이후 원본에서 남은 텍스트 찾기
+        last_text = result[-1].replace(" ", "")
+        script_clean = script.replace(" ", "")
+        idx = script_clean.rfind(last_text[-10:]) if len(last_text) >= 10 else -1
+        if idx != -1:
+            covered_end = idx + 10
+            # 원본에서 해당 위치 이후 텍스트 추출
+            pos = 0
+            char_count = 0
+            for i, ch in enumerate(script):
+                if ch != " ":
+                    char_count += 1
+                if char_count >= covered_end:
+                    pos = i + 1
+                    break
+            remainder = script[pos:].strip()
+            if len(remainder) > chars * 0.3:
+                extra = _call_split_api(
+                    client, remainder, seconds, chars,
+                    max(1, round(len(remainder) / chars))
+                )
+                if extra:
+                    result.extend(extra)
+
+    return result if result else _fallback_split(script, chars)
 
 
-def _split_single(client, script, seconds, tts_speed=1.2, _depth=0):
-    """단일 청크를 Gemini로 분할. 재귀 깊이 2 이하로 제한."""
-    chars = chars_per_second(seconds, tts_speed)
-    est = max(3, round(len(script) / chars))
+def _call_split_api(client, script, seconds, chars, est):
+    """Gemini API로 분할 요청. 실패 시 1회 재시도."""
+    prompt = f"""아래 대본을 이미지 컷 단위로 처음부터 끝까지 빠짐없이 분할하세요.
 
-    # API 호출 (ServerError 시 1회 재시도)
+핵심 규칙:
+- 한 컷 = 약 {seconds}초 = 약 {chars}글자
+- 예상 컷 수: 정확히 약 {est}개 — 이 숫자와 최대한 일치하게 분할
+- 처음부터 끝까지 단 한 문장도 빠뜨리지 말 것 (가장 중요)
+- 문장/절 단위로 자르기 — 문장 중간 절대 금지
+- 너무 짧은 절(5글자 미만)은 앞뒤와 합치기
+- 출력: 번호. 내용 형식만 (설명·주석·빈줄 없이)
+
+출력 예시:
+1. 첫 번째 컷 내용
+2. 두 번째 컷 내용
+...
+
+대본 전문:
+{script}"""
+
     for attempt in range(2):
         try:
             r = client.models.generate_content(
                 model="gemini-2.5-flash",
-                contents=f"""아래 대본을 이미지 컷 단위로 빠짐없이 분할하세요.
-
-규칙:
-- 한 컷 = 약 {seconds}초 = 약 {chars}글자
-- 예상 컷 수: 약 {est}개 — 반드시 이 숫자에 맞게 분할할 것
-- 대본의 처음부터 끝까지 단 한 글자도 빠뜨리지 말 것
-- 각 문장/절은 별도 컷으로 — 여러 문장을 하나로 뭉치지 말 것
-- 문장 중간에서 자르지 말 것 (마침표/느낌표/물음표 단위)
-- 5글자 미만만 앞뒤와 합치기
-- 번호. 내용 형식으로만 출력 (설명, 주석 없이)
-
-출력:
-1. [내용]
-2. [내용]
-...
-
-대본:
-{script}""",
-                config=types.GenerateContentConfig(temperature=0.1, max_output_tokens=4000)
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.1,
+                    max_output_tokens=5000,
+                )
             )
-            break  # 성공하면 루프 종료
-        except Exception as e:
+            cuts = []
+            for line in r.text.strip().split("\n"):
+                m = re.match(r'^\d+[\.\)]\s*(.+)', line.strip())
+                if m and m.group(1).strip():
+                    cuts.append(m.group(1).strip())
+            if cuts:
+                return cuts
+        except Exception:
             if attempt == 0:
-                time.sleep(3)  # 3초 대기 후 재시도
-                continue
-            # 2번 모두 실패 → 줄바꿈 기준 fallback
-            return [l.strip() for l in script.split("\n") if l.strip()]
+                time.sleep(3)
+    return []
 
-    cuts = []
-    for line in r.text.strip().split("\n"):
-        m = re.match(r'^\d+[\.\)]\s*(.+)', line.strip())
-        if m and m.group(1).strip():
-            cuts.append(m.group(1).strip())
 
-    if not cuts:
-        return [l.strip() for l in script.split("\n") if l.strip()]
+def _fallback_split(script, chars):
+    """API 실패 시 문장 단위 fallback 분할."""
+    sentences = re.split(r'(?<=[.!?。])\s+', script.strip())
+    cuts, current = [], ""
+    for sent in sentences:
+        sent = sent.strip()
+        if not sent:
+            continue
+        if not current:
+            current = sent
+        elif len(current) + len(sent) + 1 <= chars * 1.3:
+            current += " " + sent
+        else:
+            cuts.append(current)
+            current = sent
+    if current:
+        cuts.append(current)
+    return cuts if cuts else [script]
 
-    # 잘림 감지 — 재귀 깊이 1 이하일 때만 시도 (무한루프 방지)
-    if _depth < 1:
-        covered = "".join(cuts)
-        original = re.sub(r'\s+', '', script)
-        # 커버율이 85% 미만이면 마지막 컷 이후 남은 부분 추가 분할
-        if len(covered) < len(original) * 0.85:
-            last_cut_clean = re.sub(r'\s+', '', cuts[-1])
-            # 마지막 컷의 마지막 15글자로 원본에서 위치 탐색
-            search_str = cuts[-1][-15:] if len(cuts[-1]) >= 15 else cuts[-1]
-            last_pos = script.rfind(search_str)
-            if last_pos != -1:
-                remainder = script[last_pos + len(search_str):].strip()
-                if len(remainder) > chars * 0.3:
-                    extra = _split_single(client, remainder, seconds, tts_speed, _depth=_depth+1)
-                    cuts.extend(extra)
 
-    return cuts
 
 def build_prompt(client, cut, style_prefix, character_b64, language, idx, total):
+    """대본 컷 → 이미지 장면 묘사 (토큰 최소화)"""
     lang = LANGUAGE_SETTINGS[language]
+    char_note = "Same character as reference image, adapt expression/outfit/pose only. " if character_b64 else ""
 
-    # 캐릭터 있을 때 / 없을 때 시스템 지시 분기
-    char_section = ""
-    if character_b64:
-        char_section = """
-CHARACTER RULES (CRITICAL):
-- The main character is from the reference image provided
-- Keep species, face shape, fur color/texture, and overall body type IDENTICAL
-- BUT adapt per scene:
-  * EXPRESSION: match the emotion (shocked face, confident smirk, wide eyes in fear, laughing, crying, frowning, etc.)
-  * OUTFIT: change to fit the scene context (formal suit, casual, military, torn clothes, etc.)
-  * POSE/ACTION: dynamic and specific to the scene action
-- Character must be the focal point and clearly doing something relevant to the script"""
-
-    sys = f"""You are an expert cinematic image prompt writer for AI image generation.
-Convert a Korean script segment into a detailed English image prompt.
-
-{char_section}
-
-SCENE ANALYSIS PROCESS:
-1. WHO: specific entities (character, crowds, officials, etc.)
-2. WHAT: the core action happening RIGHT NOW in this frame
-3. KEY VISUAL OBJECTS: specific props, symbols, text overlays, icons, maps, charts, money stacks, flags
-4. EMOTION/ATMOSPHERE: what should the viewer FEEL looking at this image
-5. CAMERA/COMPOSITION: close-up, wide shot, dramatic angle, etc.
-
-OUTPUT FORMAT — write a single detailed English paragraph covering:
-- Main character's expression + pose + outfit
-- Specific action happening
-- Key objects and symbols in the scene
-- Background/setting details
-- Lighting and mood
-- Any text/labels that should appear IN the image (e.g. "속보:", chart labels, location names)
-
-QUALITY STANDARDS (match professional editorial illustration):
-- Be HYPER-SPECIFIC: not "a sad character" but "character with trembling lower lip, eyes wide with shock, hands clutching chest"
-- Include CINEMATIC details: dramatic backlighting, depth, foreground elements
-- Specify TEXT OVERLAYS when relevant to the news/story content
-- Maximum 120 words. Output the scene description ONLY."""
+    sys = (
+        "Convert Korean script to a concise English visual scene description (60-80 words max). "
+        "Extract: WHO + WHAT action + KEY objects/symbols + EMOTION. "
+        "Be specific and visual. No style words. Output scene description only."
+        + (" Character adapts expression and outfit per scene." if character_b64 else "")
+    )
 
     r = client.models.generate_content(
         model="gemini-2.5-flash",
-        contents=f'Script segment {idx}/{total}:\n"{cut}"\n\nWrite the detailed image prompt:',
-        config=types.GenerateContentConfig(system_instruction=sys, temperature=0.45, max_output_tokens=250)
+        contents=f'Script:\n"{cut}"\n\nScene:',
+        config=types.GenerateContentConfig(
+            system_instruction=sys,
+            temperature=0.4,
+            max_output_tokens=150,  # 250→150으로 축소
+        )
     )
     scene = r.text.strip().strip('"').strip("'")
-
-    # 스타일 + 캐릭터 지시 + 장면 조합
-    char_note = "Use the reference character image provided as the main character. Adapt expression, outfit, and pose to match the scene, but keep the character's core design identical. " if character_b64 else ""
-    full = f"{style_prefix} {char_note}SCENE: {scene}. {lang}."
+    full = f"{style_prefix} {char_note}SCENE: {scene}. {lang}"
     return full, scene
 
 
 def generate_image(client, prompt, cut, character_b64, language, aspect_ratio="1:1"):
-    lang = LANGUAGE_SETTINGS[language]
+    """이미지 생성 (중복 지시 제거로 토큰 절감)"""
+    ratio_map = {
+        "16:9": "wide landscape 16:9",
+        "1:1":  "square 1:1",
+        "9:16": "vertical portrait 9:16",
+    }
+    ratio_note = ratio_map.get(aspect_ratio, "square 1:1")
 
-    ratio_instruction = {
-        "16:9": "Generate this as a WIDE LANDSCAPE image (16:9 aspect ratio, horizontal composition, cinematic widescreen format).",
-        "1:1":  "Generate this as a SQUARE image (1:1 aspect ratio, balanced centered composition).",
-        "9:16": "Generate this as a TALL PORTRAIT image (9:16 aspect ratio, vertical composition optimized for mobile/shorts).",
-    }.get(aspect_ratio, "")
-
-    final = (
-        f"{prompt}\n\n"
-        f"ADDITIONAL REQUIREMENTS:\n"
-        f"- {ratio_instruction}\n"
-        f"- Draw the EXACT scene described with high detail and cinematic quality\n"
-        f"- The scene must clearly represent: '{cut[:80]}'\n"
-        f"- Include rich background details, dramatic lighting, and expressive characters\n"
-        f"- {lang}"
-    )
+    # 프롬프트 간결화 — 핵심만 유지
+    final = f"{prompt} Aspect ratio: {ratio_note}."
 
     if character_b64:
         contents = [
             types.Content(role="user", parts=[
-                types.Part(inline_data=types.Blob(mime_type="image/jpeg", data=base64.b64decode(character_b64))),
-                types.Part(text=(
-                    f"This is the reference character. Generate an image using this character as the main character, "
-                    f"adapting their expression, outfit, and pose to match the scene, "
-                    f"but keeping their species, face, and core design identical.\n\n{final}"
-                ))
+                types.Part(inline_data=types.Blob(
+                    mime_type="image/jpeg",
+                    data=base64.b64decode(character_b64)
+                )),
+                types.Part(text=f"Use this as character reference (same species/face, adapt expression/outfit/pose). {final}")
             ])
         ]
         response = client.models.generate_content(
             model="gemini-3.1-flash-image-preview",
             contents=contents,
+            config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"])
+        )
+    else:
+        response = client.models.generate_content(
+            model="gemini-3.1-flash-image-preview",
+            contents=final,
+            config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"])
+        )
             config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"])
         )
     else:
@@ -861,6 +849,7 @@ st.components.v1.html("""
 })();
 </script>
 """, height=380, scrolling=True)
+
 
 
 
