@@ -263,13 +263,26 @@ def _fallback_split(script, chars):
 def build_prompt(client, cut, style_prefix, character_b64, language, idx, total):
     """대본 컷 → 이미지 장면 묘사 (토큰 최소화)"""
     lang = LANGUAGE_SETTINGS[language]
-    char_note = "Same character as reference image, adapt expression/outfit/pose only. " if character_b64 else ""
+
+    # 컷 번호 기반 포즈 다양성 힌트
+    pose_hints = [
+        "extreme close-up on face, dramatic expression",
+        "wide shot, full body action pose",
+        "over-the-shoulder angle, pointing at something",
+        "low angle looking up, character looming large",
+        "bird's eye view, character small in environment",
+        "mid shot, both hands gesturing expressively",
+        "side profile, dynamic movement",
+        "three-quarter view, leaning forward intensely",
+    ]
+    pose_hint = pose_hints[(idx - 1) % len(pose_hints)]
+
+    char_note = f"Same character as reference image. POSE VARIATION: {pose_hint}. Adapt expression/outfit to scene. " if character_b64 else ""
 
     sys = (
         "Convert Korean script to a concise English visual scene description (60-80 words max). "
         "Extract: WHO + WHAT action + KEY objects/symbols + EMOTION. "
-        "Be specific and visual. No style words. Output scene description only."
-        + (" Character adapts expression and outfit per scene." if character_b64 else "")
+        "Be specific and visual. Include camera angle and composition. No style words. Output scene description only."
     )
 
     r = client.models.generate_content(
@@ -278,7 +291,7 @@ def build_prompt(client, cut, style_prefix, character_b64, language, idx, total)
         config=types.GenerateContentConfig(
             system_instruction=sys,
             temperature=0.4,
-            max_output_tokens=150,  # 250→150으로 축소
+            max_output_tokens=150,
         )
     )
     scene = r.text.strip().strip('"').strip("'")
@@ -550,13 +563,21 @@ if split_only_btn:
     client = genai.Client(api_key=api_key)
     all_cuts, all_sections = [], []
 
-    with st.spinner("장면 분할 중..."):
-        if intro_script.strip():
-            ic = split_semantic(client, intro_script.strip(), intro_seconds, tts_speed)
-            all_cuts += ic; all_sections += ["intro"] * len(ic)
-        if body_script.strip():
-            bc = split_semantic(client, body_script.strip(), body_seconds, tts_speed)
-            all_cuts += bc; all_sections += ["body"] * len(bc)
+    if intro_script.strip():
+        with st.spinner(f"✂️ 인트로 분할 중... ({len(intro_script.strip())}자)"):
+            try:
+                ic = split_semantic(client, intro_script.strip(), intro_seconds, tts_speed)
+                all_cuts += ic; all_sections += ["intro"] * len(ic)
+            except Exception as e:
+                st.session_state.errors.append(f"인트로 분할 오류: {e}")
+
+    if body_script.strip():
+        with st.spinner(f"✂️ 본문 분할 중... ({len(body_script.strip())}자)"):
+            try:
+                bc = split_semantic(client, body_script.strip(), body_seconds, tts_speed)
+                all_cuts += bc; all_sections += ["body"] * len(bc)
+            except Exception as e:
+                st.session_state.errors.append(f"본문 분할 오류: {e}")
 
     st.session_state.cuts = all_cuts
     st.session_state.sections = all_sections
@@ -581,17 +602,38 @@ if gen_btn:
     client = genai.Client(api_key=api_key)
     st.session_state.errors = []
 
-    # 분할
+    # ── 분할: 인트로·본문 각각 spinner로 진행 표시 ──
     all_cuts, all_sections = [], []
-    with st.spinner("✂️ 장면 분할 중..."):
-        if intro_script.strip():
-            ic = split_semantic(client, intro_script.strip(), intro_seconds, tts_speed)
-            all_cuts += ic; all_sections += ["intro"] * len(ic)
-        if body_script.strip():
-            bc = split_semantic(client, body_script.strip(), body_seconds, tts_speed)
-            all_cuts += bc; all_sections += ["body"] * len(bc)
+
+    if intro_script.strip():
+        with st.spinner(f"✂️ 인트로 분할 중... ({len(intro_script.strip())}자)"):
+            try:
+                ic = split_semantic(client, intro_script.strip(), intro_seconds, tts_speed)
+                all_cuts += ic
+                all_sections += ["intro"] * len(ic)
+                st.toast(f"✅ 인트로 {len(ic)}컷 분할 완료")
+            except Exception as e:
+                st.session_state.errors.append(f"인트로 분할 오류: {e}")
+
+    if body_script.strip():
+        with st.spinner(f"✂️ 본문 분할 중... ({len(body_script.strip())}자)"):
+            try:
+                bc = split_semantic(client, body_script.strip(), body_seconds, tts_speed)
+                all_cuts += bc
+                all_sections += ["body"] * len(bc)
+                st.toast(f"✅ 본문 {len(bc)}컷 분할 완료")
+            except Exception as e:
+                st.session_state.errors.append(f"본문 분할 오류: {e}")
+
+    if not all_cuts:
+        st.error("분할 실패. 대본을 확인하거나 다시 시도해주세요.")
+        st.stop()
 
     n = len(all_cuts)
+    n_intro_cuts = sum(1 for s in all_sections if s == "intro")
+    n_body_cuts  = n - n_intro_cuts
+    st.success(f"✂️ 분할 완료 — 인트로 {n_intro_cuts}컷 + 본문 {n_body_cuts}컷 = 총 {n}컷")
+
     st.session_state.cuts     = all_cuts
     st.session_state.sections = all_sections
     st.session_state.prompts  = [None]*n
@@ -900,6 +942,7 @@ st.components.v1.html("""
 })();
 </script>
 """, height=380, scrolling=True)
+
 
 
 
