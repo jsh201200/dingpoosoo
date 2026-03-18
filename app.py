@@ -168,14 +168,17 @@ def split_semantic(client, script, seconds, tts_speed=1.2):
     return _split_single(client, script, seconds, tts_speed)
 
 
-def _split_single(client, script, seconds, tts_speed=1.2):
-    """단일 청크를 Gemini로 분할. 잘린 경우 나머지를 재분할해서 합침."""
+def _split_single(client, script, seconds, tts_speed=1.2, _depth=0):
+    """단일 청크를 Gemini로 분할. 재귀 깊이 2 이하로 제한."""
     chars = chars_per_second(seconds, tts_speed)
     est = max(3, round(len(script) / chars))
 
-    r = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=f"""아래 대본을 이미지 컷 단위로 빠짐없이 분할하세요.
+    # API 호출 (ServerError 시 1회 재시도)
+    for attempt in range(2):
+        try:
+            r = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=f"""아래 대본을 이미지 컷 단위로 빠짐없이 분할하세요.
 
 규칙:
 - 한 컷 = 약 {seconds}초 = 약 {chars}글자
@@ -191,10 +194,18 @@ def _split_single(client, script, seconds, tts_speed=1.2):
 2. [내용]
 ...
 
-대본 (처음부터 끝까지 전부 분할):
+대본:
 {script}""",
-        config=types.GenerateContentConfig(temperature=0.1, max_output_tokens=4000)
-    )
+                config=types.GenerateContentConfig(temperature=0.1, max_output_tokens=4000)
+            )
+            break  # 성공하면 루프 종료
+        except Exception as e:
+            if attempt == 0:
+                time.sleep(3)  # 3초 대기 후 재시도
+                continue
+            # 2번 모두 실패 → 줄바꿈 기준 fallback
+            return [l.strip() for l in script.split("\n") if l.strip()]
+
     cuts = []
     for line in r.text.strip().split("\n"):
         m = re.match(r'^\d+[\.\)]\s*(.+)', line.strip())
@@ -202,20 +213,23 @@ def _split_single(client, script, seconds, tts_speed=1.2):
             cuts.append(m.group(1).strip())
 
     if not cuts:
-        cuts = [l.strip() for l in script.split("\n") if l.strip()]
-        return cuts
+        return [l.strip() for l in script.split("\n") if l.strip()]
 
-    # ── 잘림 감지: 마지막 컷 이후 대본 내용이 남아있으면 재분할 ──
-    last_cut = cuts[-1]
-    # 마지막 컷이 원본에서 어디까지 커버했는지 찾기
-    last_pos = script.rfind(last_cut[:20])  # 앞 20글자로 위치 탐색
-    if last_pos != -1:
-        covered_end = last_pos + len(last_cut)
-        remainder = script[covered_end:].strip()
-        # 남은 내용이 충분히 있으면 재귀적으로 추가 분할
-        if len(remainder) > chars * 0.5:
-            extra_cuts = _split_single(client, remainder, seconds, tts_speed)
-            cuts.extend(extra_cuts)
+    # 잘림 감지 — 재귀 깊이 1 이하일 때만 시도 (무한루프 방지)
+    if _depth < 1:
+        covered = "".join(cuts)
+        original = re.sub(r'\s+', '', script)
+        # 커버율이 85% 미만이면 마지막 컷 이후 남은 부분 추가 분할
+        if len(covered) < len(original) * 0.85:
+            last_cut_clean = re.sub(r'\s+', '', cuts[-1])
+            # 마지막 컷의 마지막 15글자로 원본에서 위치 탐색
+            search_str = cuts[-1][-15:] if len(cuts[-1]) >= 15 else cuts[-1]
+            last_pos = script.rfind(search_str)
+            if last_pos != -1:
+                remainder = script[last_pos + len(search_str):].strip()
+                if len(remainder) > chars * 0.3:
+                    extra = _split_single(client, remainder, seconds, tts_speed, _depth=_depth+1)
+                    cuts.extend(extra)
 
     return cuts
 
@@ -339,7 +353,7 @@ def regen_single(client, i, style_prefix, character_b64, language, aspect_ratio=
 # 사이드바
 # ══════════════════════════════════════════════════════════════
 with st.sidebar:
-    st.markdown("## 🎬 비전 메이커")
+    st.markdown("## 🎬 딩푸수 메이커")
 
     # API 키
     st.markdown("### 🔑 API 키")
@@ -438,7 +452,7 @@ with st.sidebar:
 # ══════════════════════════════════════════════════════════════
 col_title, col_btn1, col_btn2 = st.columns([4, 1.2, 1.2])
 with col_title:
-    st.markdown("## 비전 메이커 **v1.0**")
+    st.markdown("## 딩푸수 메이커 **v1.0**")
     st.caption("스크립트를 고품질 AI 비주얼 프로덕션으로 즉시 전환하세요.")
 with col_btn1:
     split_only_btn = st.button("✂️ 장면 분할", use_container_width=True)
@@ -847,6 +861,7 @@ st.components.v1.html("""
 })();
 </script>
 """, height=380, scrolling=True)
+
 
 
 
