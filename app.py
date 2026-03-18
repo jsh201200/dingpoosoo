@@ -472,7 +472,7 @@ with st.sidebar:
     aspect_ratio = st.radio(
         "비율 선택",
         options=["16:9", "1:1", "9:16"],
-        index=1,
+        index=0,
         horizontal=True,
         label_visibility="collapsed",
         help="16:9 유튜브 썸네일 · 1:1 SNS · 9:16 쇼츠/릴스"
