@@ -144,52 +144,44 @@ def chars_per_second(s, tts_speed=1.0):
 
 def split_semantic(client, script, seconds, tts_speed=1.2):
     """
-    대본 전체를 의미 단위로 분할.
-    - 청크 분할 없이 전체를 한 번에 처리 (누락 방지)
-    - 잘린 경우 나머지를 1회 보완
+    대본 분할 — Python 직접 분할 방식 (100% 안정적)
+    Gemini에게 맡기지 않고 문장 단위로 직접 묶음
     """
     chars = chars_per_second(seconds, tts_speed)
-    est   = max(3, round(len(script) / chars))
+    script = script.strip()
+    if not script:
+        return []
 
-    # Gemini에게 전체 대본을 한 번에 주고 분할 요청
-    result = _call_split_api(client, script, seconds, chars, est)
+    # 1단계: 문장 단위로 분리 (마침표/느낌표/물음표/줄바꿈)
+    raw = re.split(r'(?<=[.!?。])\s*|\n+', script)
+    sentences = [s.strip() for s in raw if s.strip() and len(s.strip()) >= 3]
 
-    if not result:
-        return _fallback_split(script, chars)
+    if not sentences:
+        return [script]
 
-    # 컷 수가 예상보다 30% 이상 부족하면 재시도
-    if len(result) < est * 0.7:
-        result2 = _call_split_api(client, script, seconds, chars, est)
-        if result2 and len(result2) > len(result):
-            result = result2
+    # 2단계: chars 기준으로 문장 묶기
+    cuts = []
+    current = ""
+    for sent in sentences:
+        if not current:
+            current = sent
+        elif len(current) + len(sent) + 1 <= chars * 1.2:
+            current += " " + sent
+        else:
+            cuts.append(current.strip())
+            current = sent
+    if current:
+        cuts.append(current.strip())
 
-    # ── 잘림 보완: 예상 컷 수 대비 80% 미만이면 나머지 추가 분할 ──
-    if len(result) < est * 0.8:
-        # 마지막 컷 이후 원본에서 남은 텍스트 찾기
-        last_text = result[-1].replace(" ", "")
-        script_clean = script.replace(" ", "")
-        idx = script_clean.rfind(last_text[-10:]) if len(last_text) >= 10 else -1
-        if idx != -1:
-            covered_end = idx + 10
-            # 원본에서 해당 위치 이후 텍스트 추출
-            pos = 0
-            char_count = 0
-            for i, ch in enumerate(script):
-                if ch != " ":
-                    char_count += 1
-                if char_count >= covered_end:
-                    pos = i + 1
-                    break
-            remainder = script[pos:].strip()
-            if len(remainder) > chars * 0.3:
-                extra = _call_split_api(
-                    client, remainder, seconds, chars,
-                    max(1, round(len(remainder) / chars))
-                )
-                if extra:
-                    result.extend(extra)
+    # 3단계: 너무 짧은 컷(10자 미만) 앞 컷에 합치기
+    merged = []
+    for cut in cuts:
+        if merged and len(cut) < 10:
+            merged[-1] = merged[-1] + " " + cut
+        else:
+            merged.append(cut)
 
-    return result if result else _fallback_split(script, chars)
+    return merged if merged else [script]
 
 
 def _call_split_api(client, script, seconds, chars, est):
@@ -261,37 +253,51 @@ def _fallback_split(script, chars):
 
 
 def build_prompt(client, cut, style_prefix, character_b64, language, idx, total):
-    """대본 컷 → 이미지 장면 묘사 (토큰 최소화)"""
+    """대본 컷 → 이미지 프롬프트 (모든 요소 Gemini 자율 판단)"""
     lang = LANGUAGE_SETTINGS[language]
 
-    # 컷 번호 기반 포즈 다양성 힌트
-    pose_hints = [
-        "extreme close-up on face, dramatic expression",
-        "wide shot, full body action pose",
-        "over-the-shoulder angle, pointing at something",
-        "low angle looking up, character looming large",
-        "bird's eye view, character small in environment",
-        "mid shot, both hands gesturing expressively",
-        "side profile, dynamic movement",
-        "three-quarter view, leaning forward intensely",
-    ]
-    pose_hint = pose_hints[(idx - 1) % len(pose_hints)]
+    char_note = (
+        "SAME CHARACTER as reference image (keep species/face/fur/body type identical). "
+        "Adapt expression, outfit, and pose to perfectly match this scene. "
+    ) if character_b64 else ""
 
-    char_note = f"Same character as reference image. POSE VARIATION: {pose_hint}. Adapt expression/outfit to scene. " if character_b64 else ""
+    sys = """You are a world-class cinematic art director creating diverse, visually stunning images.
 
-    sys = (
-        "Convert Korean script to a concise English visual scene description (60-80 words max). "
-        "Extract: WHO + WHAT action + KEY objects/symbols + EMOTION. "
-        "Be specific and visual. Include camera angle and composition. No style words. Output scene description only."
-    )
+For each script segment, YOU decide ALL visual elements based purely on the content:
+
+DECIDE FREELY:
+1. BACKGROUND/SETTING — analyze what this script is actually about and choose the perfect environment
+   The setting must feel EARNED by the content, not generic
+   
+2. CAMERA ANGLE & FRAMING — choose what creates the most IMPACT for this specific moment:
+   Consider: extreme close-up / medium shot / wide shot / low angle / high angle / dutch tilt /
+   bird's eye / worm's eye / over-shoulder / tracking shot feel / etc.
+   Don't repeat similar angles from what would logically be adjacent scenes
+   
+3. CHARACTER SIZE IN FRAME — tiny against epic backdrop? filling entire frame? mid-sized?
+   
+4. CHARACTER GAZE & DIRECTION — at viewer? away? down? up? sideways?
+   
+5. CHARACTER EXPRESSION & BODY LANGUAGE — hyper-specific physical description
+   
+6. LIGHTING & ATMOSPHERE — what MOOD does this moment demand?
+
+7. KEY VISUAL ELEMENTS — props, symbols, text, environmental details that tell the story
+
+RULES:
+- Read the Korean script carefully. What is the EMOTIONAL CORE of this moment?
+- Background must match genre: could be a kitchen, battlefield, mountain, office, space, street market, hospital, stadium — anything the script demands
+- Every image should look COMPLETELY DIFFERENT from the others in composition
+- Be cinematically bold. Avoid safe/generic choices.
+- Output: ONE paragraph, 80-100 words, English only. Pure scene description, no style words."""
 
     r = client.models.generate_content(
         model="gemini-2.5-flash",
-        contents=f'Script:\n"{cut}"\n\nScene:',
+        contents=f'Script segment {idx} of {total}:\n"{cut}"\n\nCreate the cinematic scene description:',
         config=types.GenerateContentConfig(
             system_instruction=sys,
-            temperature=0.4,
-            max_output_tokens=150,
+            temperature=0.75,
+            max_output_tokens=180,
         )
     )
     scene = r.text.strip().strip('"').strip("'")
@@ -942,6 +948,7 @@ st.components.v1.html("""
 })();
 </script>
 """, height=380, scrolling=True)
+
 
 
 
