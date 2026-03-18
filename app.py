@@ -128,7 +128,8 @@ LANGUAGE_SETTINGS = {
 # ── 세션 초기화 ────────────────────────────────────────────────
 for k, v in [("cuts",[]),("sections",[]),("styles",[]),("prompts",[]),
              ("scenes",[]),("images",[]),("step",0),("errors",[]),
-             ("regen_idx",None)]:
+             ("regen_idx",None),("last_intro",""),("last_body",""),
+             ("last_intro_sec",4),("last_body_sec",20),("last_tts",1.2)]:
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -510,6 +511,27 @@ if intro_script.strip() or body_script.strip():
     if est_total > 30 and not actual_total:
         st.warning(f"⚠️ 예상 {est_total}컷 — 본문 컷 시간을 늘리면 컷 수가 줄어듭니다.")
 
+# 대본·설정이 바뀌면 이전 분할 결과 자동 초기화
+_cur_intro = intro_script.strip()
+_cur_body  = body_script.strip()
+_changed = (
+    _cur_intro != st.session_state.last_intro or
+    _cur_body  != st.session_state.last_body  or
+    intro_seconds != st.session_state.last_intro_sec or
+    body_seconds  != st.session_state.last_body_sec  or
+    tts_speed     != st.session_state.last_tts
+)
+if _changed and st.session_state.step > 0:
+    for k in ["cuts","sections","styles","prompts","scenes","images","errors"]:
+        st.session_state[k] = []
+    st.session_state.step = 0
+# 현재 값 저장
+st.session_state.last_intro     = _cur_intro
+st.session_state.last_body      = _cur_body
+st.session_state.last_intro_sec = intro_seconds
+st.session_state.last_body_sec  = body_seconds
+st.session_state.last_tts       = tts_speed
+
 # 프로젝트 제목
 project_title = st.text_input("프로젝트 통합 제목", placeholder="예: 삼성전자의 차세대 EV 배터리 전략 분석",
                                label_visibility="visible")
@@ -878,6 +900,7 @@ st.components.v1.html("""
 })();
 </script>
 """, height=380, scrolling=True)
+
 
 
 
