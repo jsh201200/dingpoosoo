@@ -309,14 +309,6 @@ def generate_image(client, prompt, cut, character_b64, language, aspect_ratio="1
             contents=final,
             config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"])
         )
-            config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"])
-        )
-    else:
-        response = client.models.generate_content(
-            model="gemini-3.1-flash-image-preview",
-            contents=final,
-            config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"])
-        )
 
     for part in response.candidates[0].content.parts:
         if part.inline_data and part.inline_data.mime_type.startswith("image/"):
@@ -849,6 +841,7 @@ st.components.v1.html("""
 })();
 </script>
 """, height=380, scrolling=True)
+
 
 
 
