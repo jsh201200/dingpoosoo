@@ -233,66 +233,70 @@ def _fallback_split(script, chars):
 
 
 def build_prompt(client, cut, style_prefix, character_b64, language, idx, total):
-    """대본 컷 → 이미지 프롬프트 (구도/액션 강제 다양화)"""
+    """대본 내용 최우선 → 배경/구도/감정 자동 결정"""
     lang = LANGUAGE_SETTINGS[language]
 
-    # 컷 번호로 구도 강제 지정 — Gemini가 무시 못하게 프롬프트 앞부분에 박음
-    compositions = [
-        "COMPOSITION: Extreme close-up. Character's face fills 80% of frame. Background barely visible. Character staring directly into camera with piercing eyes.",
-        "COMPOSITION: Epic wide shot. Character is tiny, only 15% of frame height, standing in vast dramatic environment. Emphasize the scale of the world around them.",
-        "COMPOSITION: Low angle hero shot. Camera placed at ground level looking sharply upward. Character looms large against sky/ceiling. Powerful, dominant feeling.",
-        "COMPOSITION: Over-the-shoulder. Camera behind and slightly above character's shoulder. Character faces away, looking at a scene, object, or person ahead of them.",
-        "COMPOSITION: Dutch angle. Frame tilted 25 degrees. Character off-center. Unsettling, tense, something is wrong composition.",
-        "COMPOSITION: Bird's eye view. Camera directly above looking straight down. Character looks up at camera. Environment spreads around them like a map.",
-        "COMPOSITION: Extreme foreground. A large object fills one third of frame in sharp focus foreground. Character visible but mid-ground behind it.",
-        "COMPOSITION: Action mid-shot. Character caught in the middle of explosive movement — running, falling, jumping, throwing. Motion blur on limbs.",
-        "COMPOSITION: Two-thirds rule. Character positioned far left or far right of frame, occupying only one third. Environment tells the story in the remaining two thirds.",
-        "COMPOSITION: Worm's eye view. Camera at floor level looking up at steep angle. Character appears massive. Floor and ceiling both visible.",
-        "COMPOSITION: Close-up on hands or object. Character's hands, or a key object they hold, fills center frame. Character's face partially visible in background.",
-        "COMPOSITION: Silhouette shot. Character backlit against bright background. Body outline visible but face/details in shadow. Dramatic rim lighting only.",
-    ]
-    comp = compositions[(idx - 1) % len(compositions)]
-
     char_note = (
-        "CHARACTER: Use the EXACT same character from the reference image (identical species, face shape, fur color, body). "
-        "CRITICALLY change their expression, outfit, and body posture to match the scene emotion. "
+        "Use the EXACT same character from reference image (identical species, face, fur). "
+        "Change expression, outfit, and pose to match this scene's emotion. "
     ) if character_b64 else ""
 
-    sys = f"""You are a bold, visionary film director writing image prompts.
+    # 구도는 힌트로만 — 강제하지 않음
+    comp_hints = [
+        "Consider an extreme close-up if emotion is intense.",
+        "Consider a wide shot to show the environment's scale.",
+        "Consider a low angle to make the subject feel powerful.",
+        "Consider an over-the-shoulder shot for a point-of-view feel.",
+        "Consider a bird's eye view for an overview feel.",
+        "Consider a dutch angle for tension or unease.",
+        "Consider silhouetting the character against a dramatic backdrop.",
+        "Consider showing hands or a key object in the foreground.",
+        "Consider placing the character small against a vast background.",
+        "Consider a side profile shot showing movement or direction.",
+        "Consider a worm's eye view looking up dramatically.",
+        "Consider a two-thirds composition with environment telling the story.",
+    ]
+    comp_hint = comp_hints[(idx - 1) % len(comp_hints)]
 
-{comp}
+    sys = f"""You are a cinematic image prompt writer. Your #1 job is to visually represent the EXACT content and meaning of the Korean script.
 
-This composition instruction is MANDATORY. The image MUST be framed exactly as described above.
+STEP 1 — Understand the script deeply:
+- What is the CORE MESSAGE or concept?
+- What EMOTION should the viewer feel?
+- What METAPHOR or visual would best represent this idea?
+- What GENRE is this? (psychology, economics, war, cooking, romance, science, history, etc.)
 
-Now, based on the Korean script below, decide:
+STEP 2 — Choose the perfect visual:
+- BACKGROUND: Must directly represent the script topic.
+  * Script about laziness/brain → person on bed, brain diagram, cozy but stagnant room
+  * Script about war → actual battlefield, rubble, smoke
+  * Script about money → stock market floor, cash, financial charts
+  * Script about nature/science → laboratory, forest, cosmos
+  * Script about relationships → intimate spaces, people interacting
+  * NEVER default to a generic studio or news desk unless the script is literally about that
 
-1. SETTING/BACKGROUND: What environment perfectly fits this script's topic and genre?
-   Think beyond news studios. This could be: a war zone, a quiet kitchen, a crowded stadium, underwater, outer space, a hospital corridor, a mountain peak, ancient ruins, a children's bedroom — whatever the script demands.
+- CHARACTER ACTION: Show them physically doing what the script describes or feeling what it implies
+  * Not just standing — actually DOING something specific to the content
 
-2. CHARACTER ACTION: What is the character physically DOING right now?
-   They must be mid-action, not standing still. Give them a specific, dynamic body action that expresses the emotion.
-   Examples: sprinting away from an explosion / cowering under a table / laughing hysterically while throwing papers / pointing accusingly / cradling something gently / recoiling in disgust
+- ATMOSPHERE: Match the script's emotional tone precisely
 
-3. LIGHTING MOOD: What lighting makes this moment feel right?
-   Dramatic? Warm? Cold and sterile? Flickering danger lights? Golden hour? Harsh interrogation spotlight?
+STEP 3 — Composition hint (apply if it fits the content):
+{comp_hint}
 
-4. KEY VISUAL DETAILS: What objects, symbols, or environmental elements tell the story visually?
-
-Write ONE paragraph (80-100 words, English only). Pure scene description. No style words. Start with the composition element."""
+OUTPUT: One vivid paragraph, 80-100 words, English only. Be specific to THIS script's actual content."""
 
     r = client.models.generate_content(
         model="gemini-2.5-flash",
-        contents=f'Script segment {idx}/{total}:\n"{cut}"\n\nWrite scene (must follow the {comp.split(".")[0]} composition):',
+        contents=f'Script segment {idx}/{total}:\n"{cut}"\n\nAnalyze and describe the scene:',
         config=types.GenerateContentConfig(
             system_instruction=sys,
-            temperature=0.8,
+            temperature=0.7,
             max_output_tokens=200,
         )
     )
     scene = r.text.strip().strip('"').strip("'")
-    # 스타일 + 기본품질 + 구도 + 캐릭터 + 장면 조합
     effective_style = f"{style_prefix} {BASE_QUALITY}" if style_prefix.strip() else BASE_QUALITY
-    full = f"{effective_style} {comp} {char_note}SCENE: {scene}. {lang}"
+    full = f"{effective_style} {char_note}SCENE: {scene}. {lang}"
     return full, scene
 
 
@@ -939,6 +943,7 @@ st.components.v1.html("""
 })();
 </script>
 """, height=380, scrolling=True)
+
 
 
 
