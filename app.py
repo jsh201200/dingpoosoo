@@ -264,12 +264,14 @@ def build_prompt(client, cut, style_prefix, character_b64, language, idx, total)
     """대본 내용 최우선 → 배경/구도/감정 자동 결정"""
     lang = LANGUAGE_SETTINGS[language]
 
+    # 캐릭터 있으면: 스타일 프롬프트가 뭐든 이 캐릭터가 주인공
     char_note = (
-        "Use the EXACT same character from reference image (identical species, face, fur). "
-        "Change expression, outfit, and pose to match this scene's emotion. "
+        "CRITICAL: The main character MUST be the exact same character as in the reference image. "
+        "Preserve species, face shape, body proportions, fur/skin color and texture EXACTLY. "
+        "ONLY change: expression (match scene emotion), outfit (match scene context), pose/action. "
+        "This applies regardless of the art style — same character, different style rendering. "
     ) if character_b64 else STICKMAN_FALLBACK
 
-    # 구도는 힌트로만 — 강제하지 않음
     comp_hints = [
         "Consider an extreme close-up if emotion is intense.",
         "Consider a wide shot to show the environment's scale.",
@@ -286,36 +288,29 @@ def build_prompt(client, cut, style_prefix, character_b64, language, idx, total)
     ]
     comp_hint = comp_hints[(idx - 1) % len(comp_hints)]
 
-    sys = f"""You are a cinematic image prompt writer. Your #1 job is to visually represent the EXACT content and meaning of the Korean script.
+    sys = f"""You are a visual interpreter — your job is to READ the Korean script deeply and translate its TRUE MEANING into a vivid visual scene.
 
-STEP 1 — Understand the script deeply:
-- What is the CORE MESSAGE or concept?
-- What EMOTION should the viewer feel?
-- What METAPHOR or visual would best represent this idea?
-- What GENRE is this? (psychology, economics, war, cooking, romance, science, history, etc.)
+MOST IMPORTANT: Don't just describe what the words say literally. Capture what they MEAN and FEEL.
 
-STEP 2 — Choose the perfect visual:
-- BACKGROUND: Must directly represent the script topic.
-  * Script about laziness/brain → person on bed, brain diagram, cozy but stagnant room
-  * Script about war → actual battlefield, rubble, smoke
-  * Script about money → stock market floor, cash, financial charts
-  * Script about nature/science → laboratory, forest, cosmos
-  * Script about relationships → intimate spaces, people interacting
-  * NEVER default to a generic studio or news desk unless the script is literally about that
+HOW TO INTERPRET:
+- Metaphors → visualize them literally: "뚱냥이처럼 늘어진 몸" = a fat lazy cat melting into a bed
+- Abstract concepts → make them physical: "의지력이 바닥났다" = an empty fuel gauge, a drained battery
+- Emotional states → show in body and environment: "뇌가 파업" = factory shutdown, workers sitting down, machines stopped
+- Comparisons → show both sides visually: "기름 없는 차" = car broken down, empty gauge, person pushing it
+- Irony/contrast → show the tension: "성공하고 싶은데 못 움직인다" = person with fire in eyes but body stuck in quicksand
 
-- CHARACTER ACTION: Show them physically doing what the script describes or feeling what it implies
-  * Not just standing — actually DOING something specific to the content
+PROCESS:
+1. What does this script REALLY mean? (not just the surface words)
+2. What single image would make someone instantly GET it without reading?
+3. What emotion hits you first when you read this?
+4. What's the most DIRECT visual metaphor for this idea?
 
-- ATMOSPHERE: Match the script's emotional tone precisely
-
-STEP 3 — Composition hint (apply if it fits the content):
-{comp_hint}
-
-OUTPUT: One vivid paragraph, 80-100 words, English only. Be specific to THIS script's actual content."""
+Then describe that scene: who, doing what, where, in what light, with what emotion.
+Be SPECIFIC and VISUAL. 80-100 words, English only. No style words."""
 
     r = client.models.generate_content(
         model="gemini-2.5-flash",
-        contents=f'Script segment {idx}/{total}:\n"{cut}"\n\nAnalyze and describe the scene:',
+        contents=f'Script segment {idx}/{total}:\n"{cut}"\n\nDescribe the scene:',
         config=types.GenerateContentConfig(
             system_instruction=sys,
             temperature=0.7,
@@ -323,13 +318,19 @@ OUTPUT: One vivid paragraph, 80-100 words, English only. Be specific to THIS scr
         )
     )
     scene = r.text.strip().strip('"').strip("'")
-    effective_style = f"{style_prefix} {BASE_QUALITY}" if style_prefix.strip() else BASE_QUALITY
-    full = f"{effective_style} {char_note}SCENE: {scene}. {lang}"
+
+    # 캐릭터가 있으면 스타일에서 동물/캐릭터 관련 지시를 덮어쓰기
+    if character_b64:
+        effective_style = f"{style_prefix} {BASE_QUALITY}"
+        full = f"{effective_style} {char_note}SCENE: {scene}. {lang}"
+    else:
+        effective_style = f"{style_prefix} {BASE_QUALITY}" if style_prefix.strip() else BASE_QUALITY
+        full = f"{effective_style} {char_note}SCENE: {scene}. {lang}"
     return full, scene
 
 
 def generate_image(client, prompt, cut, character_b64, language, aspect_ratio="1:1"):
-    """이미지 생성 (중복 지시 제거로 토큰 절감)"""
+    """이미지 생성 — 캐릭터 참조 이미지를 최우선 기준으로"""
     ratio_map = {
         "16:9": "wide landscape 16:9",
         "1:1":  "square 1:1",
@@ -337,8 +338,7 @@ def generate_image(client, prompt, cut, character_b64, language, aspect_ratio="1
     }
     ratio_note = ratio_map.get(aspect_ratio, "square 1:1")
 
-    # 프롬프트 간결화 — 핵심만 유지
-    char_fallback_note = "" if character_b64 else "If no specific character is defined, use a simple expressive stickman (circle head, stick limbs, bold lines). "
+    char_fallback_note = "" if character_b64 else "No character reference — use stickman or anonymous figure as appropriate. "
     final = f"{prompt} {char_fallback_note}Aspect ratio: {ratio_note}."
 
     if character_b64:
@@ -348,7 +348,13 @@ def generate_image(client, prompt, cut, character_b64, language, aspect_ratio="1
                     mime_type="image/jpeg",
                     data=base64.b64decode(character_b64)
                 )),
-                types.Part(text=f"Use this as character reference (same species/face, adapt expression/outfit/pose). {final}")
+                types.Part(text=(
+                    f"THIS IS THE CHARACTER REFERENCE IMAGE. "
+                    f"The main character in the generated image MUST look identical to this character — "
+                    f"same species, same face, same body shape, same fur/skin color. "
+                    f"Apply the art style to THIS character, not a random one. "
+                    f"Only adapt their expression, outfit, and pose to match the scene.\n\n{final}"
+                ))
             ])
         ]
         response = client.models.generate_content(
@@ -762,6 +768,42 @@ if gen_btn:
                     placeholders[i].warning(f"❌ 컷 {i+1} 생성 실패")
 
     st.session_state.images = images_out
+
+    # ── 자동 라이브러리 저장 ──────────────────────────────────
+    _auto_title = (
+        project_title.strip()
+        or (all_cuts[0][:20] if all_cuts else "작업")
+    )
+    _auto_items = []
+    for _i, (_cut, _img) in enumerate(zip(all_cuts, images_out)):
+        _img_b64 = ""
+        if _img:
+            _buf = io.BytesIO(); _img.save(_buf, format="PNG")
+            _img_b64 = base64.b64encode(_buf.getvalue()).decode()
+        _auto_items.append({
+            "cut": _cut,
+            "img": _img_b64,
+            "section": all_sections[_i] if _i < len(all_sections) else "body"
+        })
+    _auto_entry = {
+        "id": str(int(datetime.datetime.now().timestamp() * 1000)),
+        "title": _auto_title,
+        "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "expire": (datetime.datetime.now() + datetime.timedelta(days=2)).timestamp(),
+        "items": _auto_items,
+    }
+    _auto_json = json.dumps(_auto_entry, ensure_ascii=False)
+    st.components.v1.html(f"""<script>
+(function(){{
+  var key='imggen_library';
+  var arr=JSON.parse(localStorage.getItem(key)||'[]');
+  var now=Date.now()/1000;
+  arr=arr.filter(function(e){{return e.expire>now;}});
+  arr.unshift({_auto_json});
+  localStorage.setItem(key,JSON.stringify(arr));
+}})();
+</script>""", height=0)
+
     st.rerun()
 
 # ══════════════════════════════════════════════════════════════
@@ -805,6 +847,16 @@ if st.session_state.step >= 1 and cuts:
             with st.expander(f"⚠️ 오류 {len(st.session_state.errors)}건"):
                 for e in st.session_state.errors: st.caption(e)
 
+        # ZIP 파일명 — 프로젝트 제목 or 인트로 첫 문장 자동 사용
+        _zip_title = (
+            project_title.strip()
+            or (cuts[0][:20].strip() if cuts else "딩푸수메이커")
+        )
+        # 파일명에 쓸 수 없는 문자 제거
+        import re as _re
+        _safe_title = _re.sub(r'[\\/*?:"<>|]', '', _zip_title).strip()[:30]
+        _zip_filename = f"{_safe_title}.zip" if _safe_title else "딩푸수메이커.zip"
+
         # ZIP 다운로드
         zip_buf = io.BytesIO()
         with zipfile.ZipFile(zip_buf,"w") as zf:
@@ -813,7 +865,7 @@ if st.session_state.step >= 1 and cuts:
                     b = io.BytesIO(); img.save(b, format="PNG")
                     zf.writestr(f"scene_{i+1:02d}.png", b.getvalue())
         st.download_button("📦 생성된 모든 이미지 .ZIP 다운로드",
-                           zip_buf.getvalue(), "vision_maker.zip",
+                           zip_buf.getvalue(), _zip_filename,
                            "application/zip", type="primary", use_container_width=True)
 
         st.markdown("---")
@@ -972,6 +1024,7 @@ st.components.v1.html("""
 })();
 </script>
 """, height=380, scrolling=True)
+
 
 
 
