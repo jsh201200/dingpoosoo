@@ -25,97 +25,77 @@ st.markdown("""
 # ── 스타일 프리셋 ──────────────────────────────────────────────
 STYLE_PRESETS = {
     "🐿️ Pixar/Disney 3D": (
-        "Pixar and Disney CGI animation style, high-quality 3D render with warm cinematic studio lighting. "
-        "Expressive anthropomorphic animal character as the focal point — large soulful eyes, soft detailed fur texture, "
+        "Pixar and Disney CGI animation style, high-quality 3D render. "
+        "Expressive anthropomorphic animal character — large soulful eyes, soft detailed fur texture, "
         "fluid body proportions with oversized head for expressiveness. "
-        "Outfit and accessories are context-appropriate and richly detailed (fabric folds, buttons, badges). "
-        "Background is a fully realized, stylized 3D environment with depth layers: foreground props, midground activity, "
-        "blurred background establishing location. "
-        "Cinematic depth of field, vibrant saturated colors with rim lighting. "
-        "Any Korean or English text in the scene (signs, screens, banners, news tickers, charts) must be sharply rendered, "
-        "legible, correctly spelled, and naturally integrated into the environment. "
-        "Overall feel: Zootopia meets a Korean news studio — polished, warm, emotionally engaging."
+        "Outfit and accessories richly detailed: fabric folds, buttons, badges, context-appropriate clothing. "
+        "Cinematic depth of field, vibrant saturated colors, warm rim lighting, volumetric light rays. "
+        "Background is a fully realized stylized 3D environment matching the scene content exactly. "
+        "Foreground props, midground activity, blurred background depth layers. "
+        "Any text in scene must be sharply rendered, legible, correctly spelled. "
+        "Polished, warm, emotionally engaging — Pixar feature film quality."
     ),
     "📰 뉴스/시사 다큐": (
-        "Editorial illustration in the hand-drawn ink-and-wash style of Quentin Blake with aggressive news urgency. "
-        "Loose, expressive, scribbled ink line work — thick where dramatic, thin where delicate. "
-        "High-contrast composition: stark white areas slammed against deep charcoal black shadows. "
-        "Minimal transparent watercolor wash — dominant palette of washed deep crimson red, cold navy blue, "
-        "and urgent ochre yellow, applied loosely over ink lines with deliberate bleed and texture. "
-        "Any Korean or English text (속보, 긴급, headlines, location labels, statistics) must appear as "
-        "bold hand-lettered or stenciled text, dramatically integrated into the composition — "
-        "on banners, chalkboards, torn paper, or broadcast lower-thirds. "
-        "Characters show exaggerated emotion through body language: hunched shoulders for defeat, "
-        "raised fist for defiance, wide-eyed paralysis for shock. "
-        "Background has editorial depth: maps, data charts, silhouetted crowds, architectural outlines. "
-        "Raw, unfinished, powerful — like a breaking news illustration drawn under deadline pressure."
+        "Editorial illustration in hand-drawn ink-and-wash style of Quentin Blake, news urgency aesthetic. "
+        "Loose expressive scribbled ink line work — thick where dramatic, thin where delicate. "
+        "High-contrast: stark white areas against deep charcoal black shadows. "
+        "Minimal transparent watercolor wash — washed deep crimson red, cold navy blue, urgent ochre yellow. "
+        "Any text (속보, 긴급, headlines, labels) as bold hand-lettered stenciled text on banners or torn paper. "
+        "Characters show exaggerated emotion through body language. "
+        "Raw, unfinished, powerful — breaking news illustration drawn under deadline pressure. "
+        "Background environment must match the script topic exactly — NOT a news desk unless script is literally about news."
     ),
     "😊 실사 다큐 포토": (
-        "National Geographic and Reuters photojournalism aesthetic — cinematic documentary photography style. "
-        "The main subject is an anthropomorphic animal character rendered with extreme photorealistic detail: "
-        "individual fur strands, skin texture around eyes and nose, realistic light refraction in the eyes. "
-        "Shallow depth of field — subject sharp, background beautifully blurred with environmental storytelling. "
-        "Lighting is volumetric and natural: golden-hour warmth, cold blue office fluorescence, "
-        "or dramatic single-source spotlight depending on scene emotion. "
-        "The background is a fully detailed real-world environment (newsroom, protest street, courtroom, market) "
-        "with authentic props, people, and atmosphere. "
-        "Any Korean or English text visible in the scene (news monitors, protest signs, building signage, "
-        "document text, TV chyrons) must be photographically realistic, correctly spelled, "
-        "and naturally lit as if actually present in the environment. "
-        "Shot on Canon EOS R5, 85mm f/1.4 lens, RAW format, 8K resolution. "
-        "Color grading: cinematic LUT — slightly desaturated midtones, lifted shadows, cool highlights. "
-        "Masterpiece quality — the kind of image that wins a World Press Photo award."
+        "National Geographic photojournalism aesthetic, cinematic documentary photography. "
+        "Anthropomorphic animal character with extreme photorealistic detail: individual fur strands, realistic eyes. "
+        "Shallow depth of field — subject razor sharp, background bokeh with environmental storytelling. "
+        "Volumetric natural lighting matching scene mood: golden-hour / cold fluorescence / dramatic spotlight. "
+        "Background is a fully detailed real-world environment matching script content exactly. "
+        "Any text visible must be photographically realistic, correctly spelled, naturally lit. "
+        "Shot on Canon EOS R5, 85mm f/1.4, 8K. Cinematic LUT color grade. World Press Photo award quality."
     ),
     "🎨 퀜틴 블레이크 수채화": (
-        "Quintessential Quentin Blake hand-drawn illustration — loose, joyful, humanistic. "
+        "Quentin Blake hand-drawn illustration — loose, joyful, humanistic. "
         "Scribbled expressive black ink lines with deliberate imperfection and energy. "
-        "Layered transparent watercolor washes with natural bleeding at edges: "
-        "dominant palette of warm washed blues, soft pale greens, golden ochre, dusty rose, and gentle soft reds. "
-        "Pure white background preserved in key areas to create luminosity and airiness. "
-        "Characters are drawn with elastic, exaggerated proportions — rubbery limbs, tilted heads, "
-        "enormous expressive eyes communicating complex emotion in a single glance. "
-        "Backgrounds are suggested rather than fully rendered: loose architectural lines, "
-        "a few gestural strokes establishing location without overpowering the character. "
-        "Any Korean or English text in the image should appear as hand-lettered script "
-        "organically woven into the illustration — on books, signs, banners, or notes — "
-        "in the same loose ink style as the rest of the artwork. "
-        "Overall warmth: the kind of illustration that makes adults feel like children again."
+        "Layered transparent watercolor washes: warm blues, pale greens, golden ochre, dusty rose, soft reds. "
+        "Pure white background preserved in key areas for luminosity. "
+        "Characters with elastic exaggerated proportions — rubbery limbs, tilted heads, enormous expressive eyes. "
+        "Background loosely suggested with gestural strokes establishing location. "
+        "Any text as hand-lettered script organically woven into illustration. "
+        "Background setting must reflect scene content — could be outdoors, indoors, abstract, anywhere."
     ),
     "🎭 흑백 드라마 잉크": (
-        "Stark, powerful black-and-white ink illustration — political cartoon meets graphic novel gravitas. "
-        "Bold, deliberate brush strokes with dramatic variation: razor-thin lines for detail, "
-        "thick slashing strokes for impact and shadow. "
-        "Chiaroscuro lighting — deep pools of black shadow with sharp white highlights, "
-        "zero mid-tones, maximum emotional contrast. "
-        "Composition is cinematic and theatrical: strong diagonals, extreme close-ups, "
-        "dutch angles, silhouettes against harsh white. "
-        "Characters are drawn with anatomical exaggeration for emotional effect — "
-        "hunched villains, towering heroes, crumbling figures in despair. "
-        "Background elements are bold graphic shapes: city skylines reduced to black geometry, "
-        "crowds as waves of silhouettes, institutions as imposing fortress lines. "
-        "Any Korean or English text must appear as bold, high-contrast block lettering or "
-        "stenciled type integrated into the image — urgent, unmissable, graphically powerful. "
-        "Zero color. Only black ink on white. Like a protest poster designed by a master printmaker."
+        "Stark black-and-white ink illustration — political cartoon meets graphic novel. "
+        "Bold deliberate brush strokes: razor-thin detail lines, thick slashing impact strokes. "
+        "Chiaroscuro: deep black shadow pools, sharp white highlights, zero mid-tones. "
+        "Strong diagonals, extreme angles, silhouettes against harsh white. "
+        "Characters anatomically exaggerated for emotional effect. "
+        "Background as bold graphic shapes matching scene environment. "
+        "Any text as bold high-contrast block lettering. Zero color. Only black ink on white."
     ),
     "✏️ 모던 인포그래픽": (
-        "Clean, sophisticated modern editorial illustration — information design meets fine art. "
-        "Precise, consistent line weight throughout: thin 1pt outlines on all elements, "
-        "no hand-drawn variation, purely geometric precision. "
-        "Flat color fills only — curated palette of 4-5 colors maximum: "
-        "one dominant neutral (off-white or light gray), two accent colors, one dark anchor color. "
-        "Layout follows clear visual hierarchy: main character/subject large and centered, "
-        "supporting elements organized in clear spatial zones. "
-        "Data visualization elements (charts, graphs, timelines, flow diagrams, maps, percentages) "
-        "are sharply rendered as crisp graphic elements integral to the composition. "
-        "Any Korean or English text — labels, statistics, headlines, captions, UI elements — "
-        "must be typographically clean, correctly spelled, appropriately sized, "
-        "and designed as a core compositional element rather than an afterthought. "
-        "White background with generous negative space. "
-        "Overall aesthetic: the cover of a prestigious Korean economics magazine — "
-        "intelligent, clear, visually elegant."
+        "Clean sophisticated modern editorial illustration — information design meets fine art. "
+        "Precise consistent 1pt outlines, purely geometric. "
+        "Flat color fills: 4-5 color palette maximum, one neutral, two accents, one dark anchor. "
+        "Data visualization elements (charts, graphs, maps, timelines) as crisp graphic elements. "
+        "Any text typographically clean, correctly spelled, sized as core compositional element. "
+        "Background environment simplified into graphic shapes matching scene content. "
+        "Prestigious Korean economics magazine cover aesthetic."
     ),
     "🖌️ 커스텀": "",
 }
+
+# 모든 스타일에 공통 적용되는 품질 기본 지시
+# (스타일 프롬프트 뒤에 항상 자동 추가됨)
+BASE_QUALITY = (
+    "HIGH DETAIL: richly detailed background environment that matches the script content exactly — "
+    "NOT a generic office or news desk unless the script is literally about that. "
+    "The background tells the story as much as the character. "
+    "Expressive character with clear emotion visible in face and body posture. "
+    "Dynamic lighting that matches the scene mood. "
+    "Foreground, midground, and background layers for depth. "
+    "Cinematic quality, highly detailed, masterpiece level rendering."
+)
 
 
 LANGUAGE_SETTINGS = {
@@ -253,55 +233,66 @@ def _fallback_split(script, chars):
 
 
 def build_prompt(client, cut, style_prefix, character_b64, language, idx, total):
-    """대본 컷 → 이미지 프롬프트 (모든 요소 Gemini 자율 판단)"""
+    """대본 컷 → 이미지 프롬프트 (구도/액션 강제 다양화)"""
     lang = LANGUAGE_SETTINGS[language]
 
+    # 컷 번호로 구도 강제 지정 — Gemini가 무시 못하게 프롬프트 앞부분에 박음
+    compositions = [
+        "COMPOSITION: Extreme close-up. Character's face fills 80% of frame. Background barely visible. Character staring directly into camera with piercing eyes.",
+        "COMPOSITION: Epic wide shot. Character is tiny, only 15% of frame height, standing in vast dramatic environment. Emphasize the scale of the world around them.",
+        "COMPOSITION: Low angle hero shot. Camera placed at ground level looking sharply upward. Character looms large against sky/ceiling. Powerful, dominant feeling.",
+        "COMPOSITION: Over-the-shoulder. Camera behind and slightly above character's shoulder. Character faces away, looking at a scene, object, or person ahead of them.",
+        "COMPOSITION: Dutch angle. Frame tilted 25 degrees. Character off-center. Unsettling, tense, something is wrong composition.",
+        "COMPOSITION: Bird's eye view. Camera directly above looking straight down. Character looks up at camera. Environment spreads around them like a map.",
+        "COMPOSITION: Extreme foreground. A large object fills one third of frame in sharp focus foreground. Character visible but mid-ground behind it.",
+        "COMPOSITION: Action mid-shot. Character caught in the middle of explosive movement — running, falling, jumping, throwing. Motion blur on limbs.",
+        "COMPOSITION: Two-thirds rule. Character positioned far left or far right of frame, occupying only one third. Environment tells the story in the remaining two thirds.",
+        "COMPOSITION: Worm's eye view. Camera at floor level looking up at steep angle. Character appears massive. Floor and ceiling both visible.",
+        "COMPOSITION: Close-up on hands or object. Character's hands, or a key object they hold, fills center frame. Character's face partially visible in background.",
+        "COMPOSITION: Silhouette shot. Character backlit against bright background. Body outline visible but face/details in shadow. Dramatic rim lighting only.",
+    ]
+    comp = compositions[(idx - 1) % len(compositions)]
+
     char_note = (
-        "SAME CHARACTER as reference image (keep species/face/fur/body type identical). "
-        "Adapt expression, outfit, and pose to perfectly match this scene. "
+        "CHARACTER: Use the EXACT same character from the reference image (identical species, face shape, fur color, body). "
+        "CRITICALLY change their expression, outfit, and body posture to match the scene emotion. "
     ) if character_b64 else ""
 
-    sys = """You are a world-class cinematic art director creating diverse, visually stunning images.
+    sys = f"""You are a bold, visionary film director writing image prompts.
 
-For each script segment, YOU decide ALL visual elements based purely on the content:
+{comp}
 
-DECIDE FREELY:
-1. BACKGROUND/SETTING — analyze what this script is actually about and choose the perfect environment
-   The setting must feel EARNED by the content, not generic
-   
-2. CAMERA ANGLE & FRAMING — choose what creates the most IMPACT for this specific moment:
-   Consider: extreme close-up / medium shot / wide shot / low angle / high angle / dutch tilt /
-   bird's eye / worm's eye / over-shoulder / tracking shot feel / etc.
-   Don't repeat similar angles from what would logically be adjacent scenes
-   
-3. CHARACTER SIZE IN FRAME — tiny against epic backdrop? filling entire frame? mid-sized?
-   
-4. CHARACTER GAZE & DIRECTION — at viewer? away? down? up? sideways?
-   
-5. CHARACTER EXPRESSION & BODY LANGUAGE — hyper-specific physical description
-   
-6. LIGHTING & ATMOSPHERE — what MOOD does this moment demand?
+This composition instruction is MANDATORY. The image MUST be framed exactly as described above.
 
-7. KEY VISUAL ELEMENTS — props, symbols, text, environmental details that tell the story
+Now, based on the Korean script below, decide:
 
-RULES:
-- Read the Korean script carefully. What is the EMOTIONAL CORE of this moment?
-- Background must match genre: could be a kitchen, battlefield, mountain, office, space, street market, hospital, stadium — anything the script demands
-- Every image should look COMPLETELY DIFFERENT from the others in composition
-- Be cinematically bold. Avoid safe/generic choices.
-- Output: ONE paragraph, 80-100 words, English only. Pure scene description, no style words."""
+1. SETTING/BACKGROUND: What environment perfectly fits this script's topic and genre?
+   Think beyond news studios. This could be: a war zone, a quiet kitchen, a crowded stadium, underwater, outer space, a hospital corridor, a mountain peak, ancient ruins, a children's bedroom — whatever the script demands.
+
+2. CHARACTER ACTION: What is the character physically DOING right now?
+   They must be mid-action, not standing still. Give them a specific, dynamic body action that expresses the emotion.
+   Examples: sprinting away from an explosion / cowering under a table / laughing hysterically while throwing papers / pointing accusingly / cradling something gently / recoiling in disgust
+
+3. LIGHTING MOOD: What lighting makes this moment feel right?
+   Dramatic? Warm? Cold and sterile? Flickering danger lights? Golden hour? Harsh interrogation spotlight?
+
+4. KEY VISUAL DETAILS: What objects, symbols, or environmental elements tell the story visually?
+
+Write ONE paragraph (80-100 words, English only). Pure scene description. No style words. Start with the composition element."""
 
     r = client.models.generate_content(
         model="gemini-2.5-flash",
-        contents=f'Script segment {idx} of {total}:\n"{cut}"\n\nCreate the cinematic scene description:',
+        contents=f'Script segment {idx}/{total}:\n"{cut}"\n\nWrite scene (must follow the {comp.split(".")[0]} composition):',
         config=types.GenerateContentConfig(
             system_instruction=sys,
-            temperature=0.75,
-            max_output_tokens=180,
+            temperature=0.8,
+            max_output_tokens=200,
         )
     )
     scene = r.text.strip().strip('"').strip("'")
-    full = f"{style_prefix} {char_note}SCENE: {scene}. {lang}"
+    # 스타일 + 기본품질 + 구도 + 캐릭터 + 장면 조합
+    effective_style = f"{style_prefix} {BASE_QUALITY}" if style_prefix.strip() else BASE_QUALITY
+    full = f"{effective_style} {comp} {char_note}SCENE: {scene}. {lang}"
     return full, scene
 
 
@@ -948,6 +939,7 @@ st.components.v1.html("""
 })();
 </script>
 """, height=380, scrolling=True)
+
 
 
 
