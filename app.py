@@ -154,8 +154,13 @@ def split_semantic(client, script, seconds, tts_speed=1.2):
     result = _call_split_api(client, script, seconds, chars, est)
 
     if not result:
-        # API 실패 → 문장 단위 fallback
         return _fallback_split(script, chars)
+
+    # 컷 수가 예상보다 30% 이상 부족하면 재시도
+    if len(result) < est * 0.7:
+        result2 = _call_split_api(client, script, seconds, chars, est)
+        if result2 and len(result2) > len(result):
+            result = result2
 
     # ── 잘림 보완: 예상 컷 수 대비 80% 미만이면 나머지 추가 분할 ──
     if len(result) < est * 0.8:
@@ -188,22 +193,26 @@ def split_semantic(client, script, seconds, tts_speed=1.2):
 
 def _call_split_api(client, script, seconds, chars, est):
     """Gemini API로 분할 요청. 실패 시 1회 재시도."""
-    prompt = f"""아래 대본을 이미지 컷 단위로 처음부터 끝까지 빠짐없이 분할하세요.
+    prompt = f"""아래 대본을 이미지 컷으로 분할하세요.
 
-핵심 규칙:
-- 한 컷 = 약 {seconds}초 = 약 {chars}글자
-- 예상 컷 수: 정확히 약 {est}개 — 이 숫자와 최대한 일치하게 분할
-- 처음부터 끝까지 단 한 문장도 빠뜨리지 말 것 (가장 중요)
-- 문장/절 단위로 자르기 — 문장 중간 절대 금지
-- 너무 짧은 절(5글자 미만)은 앞뒤와 합치기
-- 출력: 번호. 내용 형식만 (설명·주석·빈줄 없이)
+⚠️ 가장 중요한 규칙: 반드시 {est}개로 분할할 것 (±1 허용)
+한 컷 = 약 {chars}글자 = 약 {seconds}초
 
-출력 예시:
-1. 첫 번째 컷 내용
-2. 두 번째 컷 내용
-...
+규칙:
+- 처음부터 끝까지 빠짐없이 (한 문장도 생략 금지)
+- 문장/절 단위로 자르기 (문장 중간 절대 금지)
+- 5글자 미만 절은 앞뒤와 합치기
+- 번호. 내용 형식만 출력 (설명·주석·빈줄 없이)
 
-대본 전문:
+총 글자수: {len(script)}자 ÷ {chars}자 = 약 {est}컷이 나와야 정상입니다.
+{est}개보다 적게 분할하면 틀린 것입니다.
+
+출력:
+1. 내용
+2. 내용
+...{est}. 내용
+
+대본:
 {script}"""
 
     for attempt in range(2):
@@ -476,12 +485,30 @@ if intro_script.strip() or body_script.strip():
     est_intro = max(1, round(intro_len / chars_per_second(intro_seconds, tts_speed))) if intro_len > 0 else 0
     est_body  = max(1, round(body_len  / chars_per_second(body_seconds,  tts_speed))) if body_len  > 0 else 0
     est_total = est_intro + est_body
+
+    # 실제 분할된 컷 수가 있으면 함께 표시
+    actual_total = len(st.session_state.cuts) if st.session_state.cuts else None
+    actual_intro = sum(1 for s in st.session_state.get("sections",[]) if s=="intro") if actual_total else None
+    actual_body  = (actual_total - actual_intro) if actual_total and actual_intro is not None else None
+
     col_e1, col_e2, col_e3 = st.columns(3)
-    col_e1.metric("🎬 인트로 예상", f"약 {est_intro}컷" if est_intro else "-")
-    col_e2.metric("📖 본문 예상",   f"약 {est_body}컷"  if est_body  else "-")
-    col_e3.metric("📦 총 예상",     f"약 {est_total}컷")
-    if est_total > 30:
-        st.warning(f"⚠️ 예상 {est_total}컷 — 본문 컷 시간을 늘리거나 대본을 줄이면 컷 수가 감소합니다.")
+    col_e1.metric(
+        "🎬 인트로",
+        f"실제 {actual_intro}컷" if actual_intro else (f"약 {est_intro}컷" if est_intro else "-"),
+        delta=f"예상 {est_intro}컷" if actual_intro and actual_intro != est_intro else None
+    )
+    col_e2.metric(
+        "📖 본문",
+        f"실제 {actual_body}컷" if actual_body else (f"약 {est_body}컷" if est_body else "-"),
+        delta=f"예상 {est_body}컷" if actual_body and actual_body != est_body else None
+    )
+    col_e3.metric(
+        "📦 총",
+        f"실제 {actual_total}컷" if actual_total else f"약 {est_total}컷",
+        delta=f"예상 {est_total}컷" if actual_total and actual_total != est_total else None
+    )
+    if est_total > 30 and not actual_total:
+        st.warning(f"⚠️ 예상 {est_total}컷 — 본문 컷 시간을 늘리면 컷 수가 줄어듭니다.")
 
 # 프로젝트 제목
 project_title = st.text_input("프로젝트 통합 제목", placeholder="예: 삼성전자의 차세대 EV 배터리 전략 분석",
@@ -607,11 +634,21 @@ if gen_btn:
 
     def _make_image(args):
         i, cut, prompt = args
-        try:
-            img = generate_image(client, prompt, cut, character_b64, language, aspect_ratio)
-            return i, img, None  # (index, image, error)
-        except Exception as e:
-            return i, None, str(e)  # 에러를 반환값으로 전달
+        # 실패 시 최대 2회 재시도
+        for attempt in range(3):
+            try:
+                img = generate_image(client, prompt, cut, character_b64, language, aspect_ratio)
+                if img is not None:
+                    return i, img, None
+                # img가 None이면 재시도
+                if attempt < 2:
+                    time.sleep(2)
+            except Exception as e:
+                if attempt < 2:
+                    time.sleep(3)  # 재시도 전 3초 대기
+                else:
+                    return i, None, str(e)
+        return i, None, "3회 시도 후 실패"
 
     with ThreadPoolExecutor(max_workers=min(parallel_workers, 4)) as ex:
         futs2 = {ex.submit(_make_image, (i, c, p)): i
@@ -841,6 +878,7 @@ st.components.v1.html("""
 })();
 </script>
 """, height=380, scrolling=True)
+
 
 
 
