@@ -6,7 +6,7 @@ from PIL import Image
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ── 페이지 설정 ────────────────────────────────────────────────
-st.set_page_config(page_title="비전 메이커", page_icon="🎬", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="딩푸수 메이커", page_icon="🎬", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
@@ -136,18 +136,18 @@ for k, v in [("cuts",[]),("sections",[]),("styles",[]),("prompts",[]),
 # 헬퍼 함수들
 # ══════════════════════════════════════════════════════════════
 
-def chars_per_second(s): return round(s * 4.5)
+def chars_per_second(s, tts_speed=1.0):
+    # 한국어 기본 낭독 속도: 4.5자/초
+    # TTS 1.2배속이면 실제 읽는 속도 = 4.5 * 1.2 = 5.4자/초
+    return round(s * 4.5 * tts_speed)
 
-def split_semantic(client, script, seconds):
-    """대본을 의미 단위로 분할. 긴 대본은 문장 단위로 청크 분할 후 합침."""
-    chars = chars_per_second(seconds)
+def split_semantic(client, script, seconds, tts_speed=1.2):
+    """대본을 의미 단위로 분할. 긴 대본은 청크로 나눠서 합침."""
+    chars = chars_per_second(seconds, tts_speed)
     est = max(3, round(len(script) / chars))
 
-    # 대본이 길면 (예상 컷 15개 초과) 청크로 나눠서 각각 분할 후 합침
     if est > 15:
-        # 문장 단위로 분리
         sentences = re.split(r'(?<=[.!?。])\s+', script.strip())
-        # 청크당 약 10컷 분량으로 묶기
         chunk_size_chars = chars * 10
         chunks, current_chunk = [], ""
         for sent in sentences:
@@ -162,15 +162,15 @@ def split_semantic(client, script, seconds):
 
         all_cuts = []
         for chunk in chunks:
-            all_cuts.extend(_split_single(client, chunk, seconds))
+            all_cuts.extend(_split_single(client, chunk, seconds, tts_speed))
         return all_cuts if all_cuts else [script]
 
-    return _split_single(client, script, seconds)
+    return _split_single(client, script, seconds, tts_speed)
 
 
-def _split_single(client, script, seconds):
+def _split_single(client, script, seconds, tts_speed=1.2):
     """단일 청크를 Gemini로 분할."""
-    chars = chars_per_second(seconds)
+    chars = chars_per_second(seconds, tts_speed)
     est = max(3, round(len(script) / chars))
     r = client.models.generate_content(
         model="gemini-2.5-flash",
@@ -323,7 +323,7 @@ def regen_single(client, i, style_prefix, character_b64, language, aspect_ratio=
 # 사이드바
 # ══════════════════════════════════════════════════════════════
 with st.sidebar:
-    st.markdown("## 🎬 비전 메이커")
+    st.markdown("## 🎬 딩푸수 메이커")
 
     # API 키
     st.markdown("### 🔑 API 키")
@@ -348,15 +348,37 @@ with st.sidebar:
 
     # 분할 설정
     st.markdown("### ⏱ 분할 설정")
+
+    # TTS 속도
+    st.markdown("**🔊 TTS 재생 속도**")
+    tts_speed = st.select_slider(
+        "TTS 속도",
+        options=[0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.5],
+        value=1.2,
+        format_func=lambda x: f"{x}배속",
+        label_visibility="collapsed",
+        help="TTS 재생 속도에 맞게 글자 수 기준이 자동 조정됩니다."
+    )
+    chars_intro = chars_per_second(1, tts_speed)  # 1초당 글자수
+    st.caption(f"1초당 약 **{chars_intro}글자** 기준 (기본 4.5 × {tts_speed}배속)")
+    st.divider()
+
     st.markdown("**🎬 인트로**")
-    intro_seconds = st.slider("인트로 컷 시간", 4, 6, 4, step=1,
-                               format="%d초", help="4~6초 고정, 빠른 호흡")
-    st.caption(f"약 {chars_per_second(intro_seconds)}글자 단위")
+    intro_seconds = st.slider("인트로 컷 시간", 4, 8, 4, step=1,
+                               format="%d초", label_visibility="collapsed")
+    intro_chars = chars_per_second(intro_seconds, tts_speed)
+    st.caption(f"컷당 약 **{intro_chars}글자**")
 
     st.markdown("**📖 본문**")
-    body_seconds = st.select_slider("본문 컷 시간", options=[20,25,30,35,40], value=20,
-                                     format_func=lambda x: f"{x}초")
-    st.caption(f"약 {chars_per_second(body_seconds)}글자 단위")
+    body_seconds = st.select_slider(
+        "본문 컷 시간",
+        options=[15, 20, 25, 30, 35, 40, 45, 50, 60],
+        value=30,
+        format_func=lambda x: f"{x}초",
+        label_visibility="collapsed"
+    )
+    body_chars = chars_per_second(body_seconds, tts_speed)
+    st.caption(f"컷당 약 **{body_chars}글자**")
     st.divider()
 
     # 스타일
@@ -400,7 +422,7 @@ with st.sidebar:
 # ══════════════════════════════════════════════════════════════
 col_title, col_btn1, col_btn2 = st.columns([4, 1.2, 1.2])
 with col_title:
-    st.markdown("## 비전 메이커 **v1.0**")
+    st.markdown("## 딩푸수 메이커 **v1.0**")
     st.caption("스크립트를 고품질 AI 비주얼 프로덕션으로 즉시 전환하세요.")
 with col_btn1:
     split_only_btn = st.button("✂️ 장면 분할", use_container_width=True)
@@ -429,6 +451,20 @@ with col_body:
     )
     st.caption(f"⏱ 본문은 설정된 시간({body_seconds}s) 기준에 따라 분할됩니다.")
 
+# 컷 수 실시간 예상
+if intro_script.strip() or body_script.strip():
+    intro_len = len(intro_script.strip())
+    body_len  = len(body_script.strip())
+    est_intro = max(1, round(intro_len / chars_per_second(intro_seconds, tts_speed))) if intro_len > 0 else 0
+    est_body  = max(1, round(body_len  / chars_per_second(body_seconds,  tts_speed))) if body_len  > 0 else 0
+    est_total = est_intro + est_body
+    col_e1, col_e2, col_e3 = st.columns(3)
+    col_e1.metric("🎬 인트로 예상", f"약 {est_intro}컷" if est_intro else "-")
+    col_e2.metric("📖 본문 예상",   f"약 {est_body}컷"  if est_body  else "-")
+    col_e3.metric("📦 총 예상",     f"약 {est_total}컷")
+    if est_total > 30:
+        st.warning(f"⚠️ 예상 {est_total}컷 — 본문 컷 시간을 늘리거나 대본을 줄이면 컷 수가 감소합니다.")
+
 # 프로젝트 제목
 project_title = st.text_input("프로젝트 통합 제목", placeholder="예: 삼성전자의 차세대 EV 배터리 전략 분석",
                                label_visibility="visible")
@@ -449,10 +485,10 @@ if split_only_btn:
 
     with st.spinner("장면 분할 중..."):
         if intro_script.strip():
-            ic = split_semantic(client, intro_script.strip(), intro_seconds)
+            ic = split_semantic(client, intro_script.strip(), intro_seconds, tts_speed)
             all_cuts += ic; all_sections += ["intro"] * len(ic)
         if body_script.strip():
-            bc = split_semantic(client, body_script.strip(), body_seconds)
+            bc = split_semantic(client, body_script.strip(), body_seconds, tts_speed)
             all_cuts += bc; all_sections += ["body"] * len(bc)
 
     st.session_state.cuts = all_cuts
@@ -482,10 +518,10 @@ if gen_btn:
     all_cuts, all_sections = [], []
     with st.spinner("✂️ 장면 분할 중..."):
         if intro_script.strip():
-            ic = split_semantic(client, intro_script.strip(), intro_seconds)
+            ic = split_semantic(client, intro_script.strip(), intro_seconds, tts_speed)
             all_cuts += ic; all_sections += ["intro"] * len(ic)
         if body_script.strip():
-            bc = split_semantic(client, body_script.strip(), body_seconds)
+            bc = split_semantic(client, body_script.strip(), body_seconds, tts_speed)
             all_cuts += bc; all_sections += ["body"] * len(bc)
 
     n = len(all_cuts)
@@ -787,6 +823,7 @@ st.components.v1.html("""
 })();
 </script>
 """, height=380, scrolling=True)
+
 
 
 
