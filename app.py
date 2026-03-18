@@ -88,13 +88,12 @@ STYLE_PRESETS = {
     "📊 경제학 유튜브": (
         "Korean economics/documentary YouTube illustration style. "
         "Bold, high-energy visual storytelling with dramatic color contrasts. "
-        "Deep navy or dark background with vivid accent colors (bright orange, red, yellow). "
+        "Color palette: freely chosen to best match the specific scene's content and emotion. "
         "When the script involves economics/geopolitics: integrate world maps, trade arrows, charts, "
-        "currency symbols, flag icons, statistics naturally into the background. "
-        "When the script involves psychology/daily life/science: use fitting metaphorical environments "
-        "(brain diagrams, human figures, nature, urban scenes) in the same bold high-contrast style. "
-        "Characters are expressive and dynamic, always mid-action. "
-        "Korean text labels allowed only when they add clear informational value to the scene. "
+        "currency symbols, flag icons, statistics naturally into the background if relevant. "
+        "When the script involves other topics: use fitting environments in the same bold energetic style. "
+        "Characters expressive and dynamic, mid-action. "
+        "Korean text labels only when adding clear informational value. "
         "Overall energy: MBC documentary meets Kurzgesagt — urgent, informative, visually exciting."
     ),
     "🖌️ 커스텀": "",
@@ -973,6 +972,7 @@ st.components.v1.html("""
 })();
 </script>
 """, height=380, scrolling=True)
+
 
 
 
