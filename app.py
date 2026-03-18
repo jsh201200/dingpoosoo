@@ -26,13 +26,14 @@ st.markdown("""
 STYLE_PRESETS = {
     "🐿️ Pixar/Disney 3D": (
         "Pixar and Disney CGI animation style, high-quality 3D render. "
-        "Expressive anthropomorphic animal character — large soulful eyes, soft detailed fur texture, "
-        "fluid body proportions with oversized head for expressiveness. "
-        "Outfit and accessories richly detailed: fabric folds, buttons, badges, context-appropriate clothing. "
+        "When character reference is provided: render that character with large soulful eyes, soft detailed fur, "
+        "fluid proportions, richly detailed outfit matching scene context. "
+        "When NO character reference: use an expressive anthropomorphic animal character "
+        "OR a stylized Pixar-style human character — whichever fits the scene better. "
         "Cinematic depth of field, vibrant saturated colors, warm rim lighting, volumetric light rays. "
         "Background is a fully realized stylized 3D environment matching the scene content exactly. "
-        "Foreground props, midground activity, blurred background depth layers. "
-        "Any text in scene must be sharply rendered, legible, correctly spelled. "
+        "Foreground, midground, background depth layers. "
+        "Any text sharply rendered, legible, correctly spelled. "
         "Polished, warm, emotionally engaging — Pixar feature film quality."
     ),
     "📰 뉴스/시사 다큐": (
@@ -47,11 +48,13 @@ STYLE_PRESETS = {
     ),
     "😊 실사 다큐 포토": (
         "National Geographic photojournalism aesthetic, cinematic documentary photography. "
-        "Anthropomorphic animal character with extreme photorealistic detail: individual fur strands, realistic eyes. "
-        "Shallow depth of field — subject razor sharp, background bokeh with environmental storytelling. "
+        "When character reference is provided: render that character with extreme photorealistic fur/skin detail. "
+        "When NO character reference: focus on environment and situation — "
+        "use silhouetted anonymous human figures (no identifiable face), hands, symbolic objects, "
+        "or pure environmental storytelling. NO random animals unless script mentions animals. "
+        "Shallow depth of field — subject razor sharp, background bokeh. "
         "Volumetric natural lighting matching scene mood: golden-hour / cold fluorescence / dramatic spotlight. "
         "Background is a fully detailed real-world environment matching script content exactly. "
-        "Any text visible must be photographically realistic, correctly spelled, naturally lit. "
         "Shot on Canon EOS R5, 85mm f/1.4, 8K. Cinematic LUT color grade. World Press Photo award quality."
     ),
     "🎨 퀜틴 블레이크 수채화": (
@@ -82,8 +85,34 @@ STYLE_PRESETS = {
         "Background environment simplified into graphic shapes matching scene content. "
         "Prestigious Korean economics magazine cover aesthetic."
     ),
+    "📊 경제학 유튜브": (
+        "Korean economics/documentary YouTube illustration style. "
+        "Bold, high-energy visual storytelling with dramatic color contrasts. "
+        "Deep navy or dark background with vivid accent colors (bright orange, red, yellow). "
+        "When the script involves economics/geopolitics: integrate world maps, trade arrows, charts, "
+        "currency symbols, flag icons, statistics naturally into the background. "
+        "When the script involves psychology/daily life/science: use fitting metaphorical environments "
+        "(brain diagrams, human figures, nature, urban scenes) in the same bold high-contrast style. "
+        "Characters are expressive and dynamic, always mid-action. "
+        "Korean text labels allowed only when they add clear informational value to the scene. "
+        "Overall energy: MBC documentary meets Kurzgesagt — urgent, informative, visually exciting."
+    ),
     "🖌️ 커스텀": "",
 }
+
+# 캐릭터 없을 때 fallback 지시
+STICKMAN_FALLBACK = (
+    "No specific character reference provided. "
+    "Represent the human element using ONE of these approaches (choose what fits the scene best): "
+    "1. SILHOUETTE — dark human outline against dramatic backlit background, no facial features visible. "
+    "2. BACK VIEW — person seen from behind, facing toward the scene, viewer follows their gaze. "
+    "3. SIDE PROFILE — partial face visible, no identifiable features, focus on expression/posture. "
+    "4. HANDS/BODY ONLY — close-up on hands interacting with objects, or body from neck down. "
+    "5. ANONYMOUS CROWD — multiple figures without individual facial detail. "
+    "6. STICKMAN — simple 2D stick figure with expressive pose if the style suits it. "
+    "Choose whichever creates the most cinematic and emotionally resonant image for this scene. "
+    "Never generate an identifiable or realistic human face. "
+)
 
 # 모든 스타일에 공통 적용되는 품질 기본 지시
 # (스타일 프롬프트 뒤에 항상 자동 추가됨)
@@ -239,7 +268,7 @@ def build_prompt(client, cut, style_prefix, character_b64, language, idx, total)
     char_note = (
         "Use the EXACT same character from reference image (identical species, face, fur). "
         "Change expression, outfit, and pose to match this scene's emotion. "
-    ) if character_b64 else ""
+    ) if character_b64 else STICKMAN_FALLBACK
 
     # 구도는 힌트로만 — 강제하지 않음
     comp_hints = [
@@ -310,7 +339,8 @@ def generate_image(client, prompt, cut, character_b64, language, aspect_ratio="1
     ratio_note = ratio_map.get(aspect_ratio, "square 1:1")
 
     # 프롬프트 간결화 — 핵심만 유지
-    final = f"{prompt} Aspect ratio: {ratio_note}."
+    char_fallback_note = "" if character_b64 else "If no specific character is defined, use a simple expressive stickman (circle head, stick limbs, bold lines). "
+    final = f"{prompt} {char_fallback_note}Aspect ratio: {ratio_note}."
 
     if character_b64:
         contents = [
@@ -417,7 +447,7 @@ with st.sidebar:
 
     # 스타일
     st.markdown("### 🎨 비주얼 스타일")
-    style_name = st.selectbox("스타일 선택", list(STYLE_PRESETS.keys()), index=0, label_visibility="collapsed")
+    style_name = st.selectbox("스타일 선택", list(STYLE_PRESETS.keys()), index=list(STYLE_PRESETS.keys()).index("📊 경제학 유튜브"), label_visibility="collapsed")
     if style_name == "🖌️ 커스텀":
         style_prefix = st.text_area("커스텀 스타일", height=80, placeholder="스타일 프롬프트 입력...")
     else:
@@ -943,6 +973,7 @@ st.components.v1.html("""
 })();
 </script>
 """, height=380, scrolling=True)
+
 
 
 
