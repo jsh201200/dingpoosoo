@@ -1014,15 +1014,15 @@ with video_tab1:
                         w, h = clip.size
                         dur = clip.duration
                         if mode == "zoom_in":
-                            return clip.resize(lambda t: 1.0 + 0.04 * (t / dur))
+                            return clip.resize(lambda t: 1.0 + 0.25 * (t / dur))
                         elif mode == "zoom_out":
-                            return clip.resize(lambda t: 1.04 - 0.04 * (t / dur))
+                            return clip.resize(lambda t: 1.25 - 0.25 * (t / dur))
                         elif mode == "pan_left":
-                            big = clip.resize(1.06)
-                            return big.set_position(lambda t: (-int(w*0.03*(t/dur)), 0)).set_duration(dur).crop(x1=0,y1=0,width=w,height=h)
+                            big = clip.resize(1.16)
+                            return big.set_position(lambda t: (-int(w*0.08*(t/dur)), 0)).set_duration(dur).crop(x1=0,y1=0,width=w,height=h)
                         elif mode == "pan_right":
-                            big = clip.resize(1.06)
-                            return big.set_position(lambda t: (int(w*0.03*(t/dur)), 0)).set_duration(dur).crop(x1=0,y1=0,width=w,height=h)
+                            big = clip.resize(1.16)
+                            return big.set_position(lambda t: (int(w*0.08*(t/dur)), 0)).set_duration(dur).crop(x1=0,y1=0,width=w,height=h)
                         return clip
 
                     clips = []
@@ -1134,11 +1134,11 @@ def apply_ken_burns(clip, mode):
     if mode == "zoom_in": return clip.resize(lambda t: 1.0+0.04*(t/dur))
     elif mode == "zoom_out": return clip.resize(lambda t: 1.04-0.04*(t/dur))
     elif mode == "pan_left":
-        big=clip.resize(1.06)
-        return big.set_position(lambda t:(-int(w*0.03*(t/dur)),0)).set_duration(dur).crop(x1=0,y1=0,width=w,height=h)
+        big=clip.resize(1.16)
+        return big.set_position(lambda t:(-int(w*0.08*(t/dur)),0)).set_duration(dur).crop(x1=0,y1=0,width=w,height=h)
     elif mode == "pan_right":
-        big=clip.resize(1.06)
-        return big.set_position(lambda t:(int(w*0.03*(t/dur)),0)).set_duration(dur).crop(x1=0,y1=0,width=w,height=h)
+        big=clip.resize(1.16)
+        return big.set_position(lambda t:(int(w*0.08*(t/dur)),0)).set_duration(dur).crop(x1=0,y1=0,width=w,height=h)
     return clip
 imgs = sorted([f for ext in ["*.png","*.jpg"] for f in glob.glob(os.path.join(IMG_FOLDER,ext))])
 print(f"이미지 {{len(imgs)}}개 발견")
@@ -1162,24 +1162,39 @@ print(f"✅ 완성! → {{OUTPUT_FILE}}")
 # TAB 3: 나중에 작업하기
 # ──────────────────────────────────────────────────────────────
 with video_tab3:
-    st.caption("이미지 생성을 해놓고 나중에 음성이랑 합칠 때 사용해요.")
+    st.caption("이미지 생성을 해놓고 나중에 음성이랑 합칠 때 사용해요. 대본 파일 넣으면 글자수 기준으로 싱크 맞춰줘요!")
 
     st.markdown("#### 📁 파일 업로드")
     later_col1, later_col2 = st.columns(2)
     with later_col1:
-        later_zip = st.file_uploader("🖼️ 이미지 ZIP 업로드 (딩푸수에서 받은 ZIP)", type=["zip"], key="later_zip")
+        later_zip = st.file_uploader("🖼️ 이미지 ZIP", type=["zip"], key="later_zip")
         if later_zip:
-            st.success(f"✅ {later_zip.name} 업로드됨")
+            st.success(f"✅ {later_zip.name}")
     with later_col2:
-        later_audio = st.file_uploader("🔊 음성파일 업로드", type=["mp3","wav","m4a"], key="later_audio")
+        later_audio = st.file_uploader("🔊 음성파일", type=["mp3","wav","m4a"], key="later_audio")
         if later_audio:
-            st.success(f"✅ {later_audio.name} 업로드됨")
+            st.success(f"✅ {later_audio.name}")
+
+    later_script = st.file_uploader("📄 대본 txt 파일 (있으면 글자수 기준 싱크 자동 적용!)", type=["txt"], key="later_script")
+    if later_script:
+        st.success(f"✅ {later_script.name} — 글자수 기준 싱크 적용!")
+    else:
+        st.caption("대본 없으면 이미지 균등 분배로 진행해요.")
 
     later_kb = st.selectbox("🎥 Ken Burns 효과", ["랜덤 (자동)", "줌인만", "줌아웃만", "좌→우 패닝", "우→좌 패닝", "없음"], key="later_kb")
+
+    if later_script:
+        later_sync_col1, later_sync_col2, later_sync_col3 = st.columns(3)
+        with later_sync_col1:
+            later_tts_speed = st.select_slider("TTS 배속", options=[0.8,0.9,1.0,1.1,1.2,1.3,1.5], value=1.2, format_func=lambda x: f"{x}배속", key="later_tts_speed")
+        with later_sync_col2:
+            later_intro_sec = st.slider("인트로 컷(초)", 4, 8, 6, key="later_intro_sec")
+        with later_sync_col3:
+            later_body_sec = st.select_slider("본문 컷(초)", options=[15,20,25,30,35,40,45,50,60], value=30, key="later_body_sec")
+
     import os as _os
     later_output = _os.path.join(_os.path.expanduser("~"), "Downloads", f"딩푸수_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4")
     st.info(f"💾 저장 위치: {later_output}")
-
     later_silence = st.slider("무음 유지 길이 (ms)", 100, 500, 200, step=50, key="later_silence")
 
     if st.button("🎬 영상 생성 시작", type="primary", use_container_width=True, key="later_gen_btn"):
@@ -1189,7 +1204,7 @@ with video_tab3:
             try:
                 from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips
                 from pydub import AudioSegment, silence as pydub_silence
-                import tempfile, random, zipfile as zf_module
+                import tempfile, random, zipfile as zf_module, os
 
                 with st.spinner("✂️ 무음 제거 중..."):
                     audio_bytes = later_audio.read()
@@ -1208,7 +1223,6 @@ with video_tab3:
                     st.success(f"✅ 무음 제거: {orig_dur:.1f}초 → {len(trimmed)/1000:.1f}초")
 
                 with st.spinner("📦 ZIP에서 이미지 추출 중..."):
-                    import os
                     tmp_dir = tempfile.mkdtemp()
                     zip_bytes = later_zip.read()
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_zip:
@@ -1220,8 +1234,61 @@ with video_tab3:
                     img_paths = sorted([os.path.join(tmp_dir, f) for f in img_files])
                     st.success(f"✅ 이미지 {len(img_paths)}개 추출됨")
 
+                audio_clip = AudioFileClip(tmp_audio_path)
+                total_dur = audio_clip.duration
+
+                if later_script:
+                    with st.spinner("📄 대본 기반 싱크 계산 중..."):
+                        later_script.seek(0)
+                        script_text = later_script.read().decode("utf-8", errors="ignore")
+                        raw = re.split(r'(?<=[.!?。])\s*|\n+', script_text.strip())
+                        sentences = [s.strip() for s in raw if s.strip() and len(s.strip()) >= 3]
+                        def cps(sec): return round(sec * 4.5 * later_tts_speed)
+                        intro_chars = cps(later_intro_sec)
+                        body_chars = cps(later_body_sec)
+                        cuts_list = []
+                        intro_done = False
+                        current = ""
+                        intro_total = 0
+                        for sent in sentences:
+                            if not intro_done:
+                                if intro_total + len(sent) <= 400:
+                                    current = (current + " " + sent).strip()
+                                    intro_total += len(sent)
+                                    if len(current) >= intro_chars:
+                                        cuts_list.append(current)
+                                        current = ""
+                                else:
+                                    if current:
+                                        cuts_list.append(current)
+                                    current = sent
+                                    intro_done = True
+                            else:
+                                if not current:
+                                    current = sent
+                                elif len(current) + len(sent) + 1 <= body_chars * 1.2:
+                                    current += " " + sent
+                                else:
+                                    cuts_list.append(current.strip())
+                                    current = sent
+                        if current:
+                            cuts_list.append(current.strip())
+
+                        total_chars = sum(len(c) for c in cuts_list)
+                        clip_durations = [total_dur * (len(c) / total_chars) for c in cuts_list]
+
+                        n_imgs = len(img_paths)
+                        n_cuts = len(cuts_list)
+                        if n_imgs != n_cuts:
+                            st.warning(f"⚠️ 이미지 {n_imgs}개 vs 대본 컷 {n_cuts}개 — 균등 분배로 전환")
+                            clip_durations = [total_dur / n_imgs] * n_imgs
+                        else:
+                            st.success(f"✅ 대본 {n_cuts}컷 기준 싱크 적용!")
+                else:
+                    clip_durations = [total_dur / len(img_paths)] * len(img_paths)
+
+                import time as _time
                 with st.spinner("🎬 영상 생성 중..."):
-                    import os
                     kb_map = {"랜덤 (자동)": "random", "줌인만": "zoom_in", "줌아웃만": "zoom_out", "좌→우 패닝": "pan_left", "우→좌 패닝": "pan_right", "없음": "none"}
                     kb_mode = kb_map[later_kb]
 
@@ -1230,27 +1297,49 @@ with video_tab3:
                         if mode == "random": mode = random.choice(["zoom_in","zoom_out","pan_left","pan_right"])
                         w, h = clip.size
                         dur = clip.duration
-                        if mode == "zoom_in": return clip.resize(lambda t: 1.0+0.04*(t/dur))
-                        elif mode == "zoom_out": return clip.resize(lambda t: 1.04-0.04*(t/dur))
+                        if mode == "zoom_in": return clip.resize(lambda t: 1.0+0.25*(t/dur))
+                        elif mode == "zoom_out": return clip.resize(lambda t: 1.25-0.25*(t/dur))
                         elif mode == "pan_left":
-                            big=clip.resize(1.06)
-                            return big.set_position(lambda t:(-int(w*0.03*(t/dur)),0)).set_duration(dur).crop(x1=0,y1=0,width=w,height=h)
+                            big=clip.resize(1.16)
+                            return big.set_position(lambda t:(-int(w*0.08*(t/dur)),0)).set_duration(dur).crop(x1=0,y1=0,width=w,height=h)
                         elif mode == "pan_right":
-                            big=clip.resize(1.06)
-                            return big.set_position(lambda t:(int(w*0.03*(t/dur)),0)).set_duration(dur).crop(x1=0,y1=0,width=w,height=h)
+                            big=clip.resize(1.16)
+                            return big.set_position(lambda t:(int(w*0.08*(t/dur)),0)).set_duration(dur).crop(x1=0,y1=0,width=w,height=h)
                         return clip
 
-                    audio_clip = AudioFileClip(tmp_audio_path)
-                    per_clip = audio_clip.duration / len(img_paths)
+                    # 1단계: 클립 생성 (진행바 + 시간 예측)
                     clips = []
-                    prog = st.progress(0, text="클립 생성 중...")
+                    prog = st.progress(0, text="🎬 클립 생성 중...")
+                    time_status = st.empty()
+                    clip_start = _time.time()
                     for idx, img_path in enumerate(img_paths):
-                        clip = ImageClip(img_path, duration=per_clip).set_fps(30)
+                        dur = clip_durations[idx] if idx < len(clip_durations) else total_dur / len(img_paths)
+                        clip = ImageClip(img_path, duration=dur).set_fps(30)
                         clip = apply_kb2(clip, kb_mode)
                         clips.append(clip)
-                        prog.progress((idx+1)/len(img_paths), text=f"클립 생성 중... {idx+1}/{len(img_paths)}")
+                        elapsed = _time.time() - clip_start
+                        done_ratio = (idx+1) / len(img_paths)
+                        if idx > 0:
+                            remaining = (elapsed / (idx+1)) * (len(img_paths) - idx - 1)
+                            mins, secs = divmod(int(remaining), 60)
+                            time_str = f"{mins}분 {secs}초" if mins > 0 else f"{secs}초"
+                            time_status.info(f"⏱ 클립 생성 중... {idx+1}/{len(img_paths)} — 예상 남은 시간: 약 {time_str}")
+                        prog.progress(done_ratio, text=f"클립 생성 {idx+1}/{len(img_paths)}")
+
+                    time_status.success(f"✅ 클립 {len(img_paths)}개 생성 완료!")
+
+                    # 2단계: 렌더링 (예상 시간 안내)
+                    est_render = int(total_dur * 0.8)
+                    mins, secs = divmod(est_render, 60)
+                    render_str = f"약 {mins}분 {secs}초" if mins > 0 else f"약 {secs}초"
+                    render_status = st.info(f"⚙️ 영상 렌더링 중... (예상 {render_str} 소요) 잠깐 기다려요!")
+                    render_start = _time.time()
                     final = concatenate_videoclips(clips, method="compose").set_audio(audio_clip)
                     final.write_videofile(later_output, fps=30, codec="libx264", audio_codec="aac", threads=4, logger=None)
+                    render_elapsed = int(_time.time() - render_start)
+                    r_mins, r_secs = divmod(render_elapsed, 60)
+                    render_str2 = f"{r_mins}분 {r_secs}초" if r_mins > 0 else f"{r_secs}초"
+                    render_status.success(f"✅ 렌더링 완료! (실제 소요: {render_str2})")
 
                 st.balloons()
                 st.success(f"🎉 영상 완성! → {later_output}")
