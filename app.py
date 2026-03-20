@@ -1050,26 +1050,33 @@ with video_tab1:
 # TAB 2: 스크립트 방식
 # ──────────────────────────────────────────────────────────────
 with video_tab2:
-    st.caption("스크립트를 받아서 로컬 cmd에서 실행하는 방식이에요.")
+    st.caption("스크립트를 받아서 로컬 cmd에서 실행하는 방식이에요. 경로는 자동으로 다운로드 폴더로 설정돼요!")
 
     st.markdown("#### ✂️ 1단계: 무음 제거 스크립트")
+    st.info("📂 원본 음성파일을 다운로드 폴더에 넣어두면 자동으로 인식해요!")
     sil_col1, sil_col2 = st.columns(2)
     with sil_col1:
-        silence_input_path = st.text_input("원본 음성파일 경로", placeholder="예: C:/Users/나/Downloads/voice.mp3", key="silence_input_path")
+        silence_input_filename = st.text_input("원본 음성파일명", placeholder="예: voice.mp3", key="silence_input_filename")
+        st.caption("다운로드 폴더 안의 파일명만 입력하세요")
     with sil_col2:
-        silence_output_path = st.text_input("출력 음성파일 경로", placeholder="예: C:/Users/나/Downloads/voice_trimmed.mp3", key="silence_output_path")
+        silence_output_filename = st.text_input("출력 음성파일명", placeholder="예: voice_trimmed.mp3", key="silence_output_filename")
+        st.caption("비워두면 자동으로 원본명_trimmed.mp3로 저장")
 
     if st.button("✂️ 무음 제거 스크립트 생성", use_container_width=True, key="gen_silence_script"):
-        if not silence_input_path or not silence_output_path:
-            st.error("입력/출력 경로를 모두 입력해주세요.")
+        if not silence_input_filename:
+            st.error("원본 음성파일명을 입력해주세요.")
         else:
+            out_name = silence_output_filename.strip() if silence_output_filename.strip() else silence_input_filename.rsplit(".",1)[0] + "_trimmed.mp3"
             silence_script = f'''#!/usr/bin/env python3
+import os
 from pydub import AudioSegment, silence
-INPUT_FILE  = r"{silence_input_path}"
-OUTPUT_FILE = r"{silence_output_path}"
+DOWNLOADS = os.path.join(os.path.expanduser("~"), "Downloads")
+INPUT_FILE  = os.path.join(DOWNLOADS, r"{silence_input_filename}")
+OUTPUT_FILE = os.path.join(DOWNLOADS, r"{out_name}")
 KEEP_SILENCE_MS = 200
 MIN_SILENCE_MS  = 400
 SILENCE_THRESH  = -40
+print(f"📂 불러오는 중: {{INPUT_FILE}}")
 audio = AudioSegment.from_file(INPUT_FILE)
 orig = len(audio)/1000
 print(f"원본: {{orig:.1f}}초")
@@ -1080,7 +1087,7 @@ for c in chunks[1:]: output += c
 trimmed = len(output)/1000
 print(f"처리후: {{trimmed:.1f}}초 ({{orig-trimmed:.1f}}초 단축)")
 output.export(OUTPUT_FILE, format="mp3", bitrate="192k")
-print(f"완성! → {{OUTPUT_FILE}}")
+print(f"✅ 완성! → {{OUTPUT_FILE}}")
 '''
             st.success("✅ 생성 완료!")
             st.download_button("⬇️ remove_silence.py 다운로드", silence_script.encode("utf-8"), "remove_silence.py", "text/x-python", use_container_width=True, key="dl_silence_script")
@@ -1088,29 +1095,30 @@ print(f"완성! → {{OUTPUT_FILE}}")
 
     st.markdown("---")
     st.markdown("#### 🎬 2단계: 영상 합치기 스크립트")
+    st.info("📂 이미지 ZIP 압축 푼 폴더와 음성파일을 다운로드 폴더에 넣어두세요!")
     vid_col1, vid_col2 = st.columns(2)
     with vid_col1:
-        img_folder_path = st.text_input("📁 이미지 폴더 경로", placeholder="예: C:/Users/나/Downloads/딩푸수이미지", key="img_folder_path")
+        img_folder_name = st.text_input("📁 이미지 폴더명", placeholder="예: 딩푸수이미지", key="img_folder_name")
+        st.caption("다운로드 폴더 안의 폴더명만 입력하세요")
     with vid_col2:
-        audio_file_path = st.text_input("🔊 음성파일 경로", placeholder="예: C:/Users/나/Downloads/voice_trimmed.mp3", key="audio_file_path")
-    vid_col3, vid_col4 = st.columns(2)
-    with vid_col3:
-        ken_burns_style = st.selectbox("🎥 Ken Burns 효과", ["랜덤 (자동)", "줌인만", "줌아웃만", "좌→우 패닝", "우→좌 패닝", "없음"], key="ken_burns_style")
-    with vid_col4:
-        output_video_path = st.text_input("💾 출력 파일 경로", placeholder="예: C:/Users/나/Downloads/final.mp4", key="output_video_path")
+        audio_file_name = st.text_input("🔊 음성파일명", placeholder="예: voice_trimmed.mp3", key="audio_file_name")
+        st.caption("다운로드 폴더 안의 파일명만 입력하세요")
+    ken_burns_style = st.selectbox("🎥 Ken Burns 효과", ["랜덤 (자동)", "줌인만", "줌아웃만", "좌→우 패닝", "우→좌 패닝", "없음"], key="ken_burns_style")
 
     if st.button("🎬 영상 제작 스크립트 생성", type="primary", use_container_width=True, key="gen_video_script"):
-        if not img_folder_path or not audio_file_path or not output_video_path:
-            st.error("이미지 폴더, 음성파일, 출력 경로를 모두 입력해주세요.")
+        if not img_folder_name or not audio_file_name:
+            st.error("이미지 폴더명과 음성파일명을 입력해주세요.")
         else:
             kb_map = {"랜덤 (자동)": "random", "줌인만": "zoom_in", "줌아웃만": "zoom_out", "좌→우 패닝": "pan_left", "우→좌 패닝": "pan_right", "없음": "none"}
             kb_mode = kb_map[ken_burns_style]
             script_code = f'''#!/usr/bin/env python3
 import os, glob, random
 from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips
-IMG_FOLDER  = r"{img_folder_path}"
-AUDIO_FILE  = r"{audio_file_path}"
-OUTPUT_FILE = r"{output_video_path}"
+from datetime import datetime
+DOWNLOADS   = os.path.join(os.path.expanduser("~"), "Downloads")
+IMG_FOLDER  = os.path.join(DOWNLOADS, r"{img_folder_name}")
+AUDIO_FILE  = os.path.join(DOWNLOADS, r"{audio_file_name}")
+OUTPUT_FILE = os.path.join(DOWNLOADS, f"딩푸수_{{datetime.now().strftime('%Y%m%d_%H%M%S')}}.mp4")
 KB_MODE = "{kb_mode}"
 FPS = 30
 def apply_ken_burns(clip, mode):
@@ -1139,7 +1147,7 @@ for i,p in enumerate(imgs):
     print(f"  {{i+1}}/{{len(imgs)}} 처리중...")
 final = concatenate_videoclips(clips,method="compose").set_audio(audio)
 final.write_videofile(OUTPUT_FILE,fps=FPS,codec="libx264",audio_codec="aac",threads=4,logger="bar")
-print(f"완성! → {{OUTPUT_FILE}}")
+print(f"✅ 완성! → {{OUTPUT_FILE}}")
 '''
             st.success("✅ 생성 완료!")
             st.download_button("⬇️ make_video.py 다운로드", script_code.encode("utf-8"), "make_video.py", "text/x-python", use_container_width=True)
