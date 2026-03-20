@@ -791,8 +791,7 @@ if gen_btn:
             _script_lines.append(f"[scene_{_i+1:02d}] [{_label}]")
             _script_lines.append(_cut)
             _script_lines.append("")
-        _zf.writestr("대본_목록.txt", "
-".join(_script_lines).encode("utf-8"))
+        _zf.writestr("대본_목록.txt", "\n".join(_script_lines).encode("utf-8"))
 
     st.session_state["auto_zip_data"]  = _zip_buf.getvalue()
     st.session_state["auto_zip_name"]  = f"{_safe_title}.zip"
