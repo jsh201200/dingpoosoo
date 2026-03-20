@@ -5,6 +5,11 @@ import base64, io, re, time, json, datetime, zipfile
 from PIL import Image
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+# Pillow 최신버전 호환성 패치
+from PIL import Image as _PILImage
+if not hasattr(_PILImage, 'ANTIALIAS'):
+    _PILImage.ANTIALIAS = _PILImage.LANCZOS
+
 # ── 페이지 설정 ────────────────────────────────────────────────
 st.set_page_config(page_title="딩푸수 메이커", page_icon="🎬", layout="wide", initial_sidebar_state="expanded")
 
