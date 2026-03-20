@@ -1203,6 +1203,7 @@ with video_tab3:
                     st.success(f"✅ 무음 제거: {orig_dur:.1f}초 → {len(trimmed)/1000:.1f}초")
 
                 with st.spinner("📦 ZIP에서 이미지 추출 중..."):
+                    import os
                     tmp_dir = tempfile.mkdtemp()
                     zip_bytes = later_zip.read()
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_zip:
