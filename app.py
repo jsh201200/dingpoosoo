@@ -589,78 +589,72 @@ with st.sidebar:
     supertone_key = st.text_input("Supertone API Key", type="password", placeholder="sup-...", label_visibility="collapsed", key="supertone_key_input")
     if supertone_key:
         st.success("✓ 연결됨", icon="✅")
-        if st.button("🔄 목소리 목록 불러오기", use_container_width=True, key="load_voices_btn"):
-            try:
-                import requests as _req
-                # 한국어 목소리 전체 + 커스텀 목소리
-                all_voices = []
-                # 일반 목소리 (한국어)
-                next_token = None
-                while True:
-                    params = {"language": "ko"}
-                    if next_token:
-                        params["page_token"] = next_token
-                    resp = _req.get("https://supertoneapi.com/v1/voices/search", headers={"x-sup-api-key": supertone_key}, params=params)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        items = data.get("items", [])
-                        all_voices.extend(items)
-                        next_token = data.get("next_page_token")
-                        if not next_token or not items:
-                            break
-                    else:
-                        break
-                # 커스텀 목소리 (Soulless 등 클론보이스)
-                next_token2 = None
-                while True:
-                    params2 = {}
-                    if next_token2:
-                        params2["page_token"] = next_token2
-                    resp2 = _req.get("https://supertoneapi.com/v1/custom-voices", headers={"x-sup-api-key": supertone_key}, params=params2)
+
+    # 미리 등록된 목소리 목록
+    MY_VOICE_IDS = [
+        "ad67887f07639d2973f48a",
+        "fd15ad31caa16bd021f01d",
+        "4653d63d07d5340656b6bc",
+        "a10e8ce028df532ae29156",
+        "ca0b75f0fc2ee0ab6fa54d",
+        "7dface2224d0a4d9d0b2fe",
+        "1f6b70f879da125bfec245",
+        "92d063343b7289e202494c",
+        "4680c81c69d8490a044413",
+        "2fa608a50f2489afc644bf",
+        "195e1922033a6168f0c90f",
+        "9d5dfb8036afacd09cd125",
+        "c9220df3a5a70647d7b022",
+        "7c56c6a6471a12816604f0",
+        "39f27eaab088024ff6f9ac",
+        "d7e4020428db55691c0020",
+    ]
+
+    if supertone_key and not st.session_state.supertone_voices:
+        if st.button("🔄 목소리 불러오기", use_container_width=True, key="load_voices_btn"):
+            import requests as _req2
+            all_voices = []
+            prog_v = st.progress(0, text="불러오는 중...")
+            for i, vid in enumerate(MY_VOICE_IDS):
+                resp = _req2.get(f"https://supertoneapi.com/v1/voices/{vid}", headers={"x-sup-api-key": supertone_key})
+                if resp.status_code == 200:
+                    all_voices.append(resp.json())
+                else:
+                    resp2 = _req2.get(f"https://supertoneapi.com/v1/custom-voices/{vid}", headers={"x-sup-api-key": supertone_key})
                     if resp2.status_code == 200:
-                        data2 = resp2.json()
-                        custom = data2.get("items", [])
-                        for c in custom:
-                            c["name"] = f"⭐ {c.get('name', 'Custom')}"
-                        all_voices.extend(custom)
-                        next_token2 = data2.get("next_page_token")
-                        if not next_token2 or not custom:
-                            break
-                    else:
-                        break
-                st.session_state.supertone_voices = all_voices
-                st.success(f"✅ 목소리 {len(all_voices)}개 로드됨! (⭐는 내 커스텀 목소리)")
-            except Exception as e:
-                st.error(f"오류: {e}")
-    
+                        v = resp2.json()
+                        v["name"] = f"⭐ {v.get('name', vid[:8])}"
+                        all_voices.append(v)
+                prog_v.progress((i+1)/len(MY_VOICE_IDS), text=f"{i+1}/{len(MY_VOICE_IDS)} 불러오는 중...")
+            st.session_state.supertone_voices = all_voices
+            st.success(f"✅ {len(all_voices)}개 로드됨!")
+            st.rerun()
+
     if st.session_state.supertone_voices:
-        voice_options = {f"{v.get('name','Unknown')} ({v.get('gender','')}/{v.get('age','')})": v.get('voice_id') or v.get('id','') for v in st.session_state.supertone_voices if v.get('voice_id') or v.get('id')}
+        voice_options = {f"{v.get('name','?')} ({v.get('gender','')}/{v.get('age','')})": v.get('voice_id') or v.get('id','') for v in st.session_state.supertone_voices}
         selected_voice_name = st.selectbox("목소리 선택", list(voice_options.keys()), label_visibility="collapsed", key="voice_select")
         st.session_state.supertone_voice_id = voice_options[selected_voice_name]
-        
-        # 선택된 목소리 스타일 목록 동적으로
-        selected_voice_data = next((v for v in st.session_state.supertone_voices if (v.get("voice_id") or v.get("id")) == st.session_state.supertone_voice_id), None)
-        available_styles = selected_voice_data.get("styles", ["neutral"]) if selected_voice_data else ["neutral"]
-        if not available_styles:
-            available_styles = ["neutral"]
-        supertone_style = st.selectbox("스타일", available_styles, label_visibility="collapsed", key="supertone_style")
-        supertone_speed = st.select_slider("배속", options=[0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.5], value=1.2, format_func=lambda x: f"{x}x", label_visibility="collapsed", key="supertone_speed")
-        sup_col1, sup_col2 = st.columns(2)
-        with sup_col1:
-            supertone_pitch = st.slider("음높이", -24, 24, 0, step=1, key="supertone_pitch")
-            st.caption(f"pitch_shift: {supertone_pitch}")
-        with sup_col2:
-            supertone_pitch_var = st.slider("음높이 변화", 0.0, 2.0, 1.0, step=0.1, key="supertone_pitch_var")
-            st.caption(f"pitch_variance: {supertone_pitch_var}")
-        # 미리듣기
-        if selected_voice_data and selected_voice_data.get("samples"):
-            sample = next((s for s in selected_voice_data["samples"] if s.get("language") == "ko"), selected_voice_data["samples"][0])
+        selected_v = next((v for v in st.session_state.supertone_voices if (v.get('voice_id') or v.get('id')) == st.session_state.supertone_voice_id), None)
+        avail_styles = selected_v.get("styles", ["neutral"]) if selected_v else ["neutral"]
+        if selected_v and selected_v.get("samples"):
+            sample = next((s for s in selected_v["samples"] if s.get("language") == "ko"), selected_v["samples"][0])
             if sample.get("url"):
                 st.audio(sample["url"], format="audio/wav")
+    elif supertone_key:
+        st.caption("위 버튼을 눌러 목소리를 불러오세요")
+        avail_styles = ["neutral"]
     else:
-        st.caption("API 키 입력 후 목소리 목록을 불러오세요")
-        supertone_style = "neutral"
-        supertone_speed = 1.2
+        avail_styles = ["neutral"]
+
+    supertone_style = st.selectbox("스타일", avail_styles if avail_styles else ["neutral"], label_visibility="collapsed", key="supertone_style")
+    supertone_speed = st.select_slider("배속", options=[0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.5], value=1.2, format_func=lambda x: f"{x}x", label_visibility="collapsed", key="supertone_speed")
+    sup_col1, sup_col2 = st.columns(2)
+    with sup_col1:
+        supertone_pitch = st.slider("음높이", -24, 24, 0, step=1, key="supertone_pitch")
+        st.caption(f"pitch_shift: {supertone_pitch}")
+    with sup_col2:
+        supertone_pitch_var = st.slider("음높이 변화", 0.0, 2.0, 1.0, step=0.1, key="supertone_pitch_var")
+        st.caption(f"pitch_variance: {supertone_pitch_var}")
 
 # ══════════════════════════════════════════════════════════════
 # 메인 영역
