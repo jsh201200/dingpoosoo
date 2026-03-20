@@ -1041,8 +1041,8 @@ with video_tab1:
                 st.balloons()
                 st.success(f"🎉 영상 완성! → {local_output_path}")
 
-            except ImportError:
-                st.error("moviepy 또는 pydub이 설치되지 않았어요. `pip install moviepy pydub` 실행해주세요.")
+            except ImportError as e:
+                st.error(f"패키지 오류: {e}")
             except Exception as e:
                 st.error(f"오류 발생: {e}")
 
@@ -1249,8 +1249,8 @@ with video_tab3:
                 st.balloons()
                 st.success(f"🎉 영상 완성! → {later_output}")
 
-            except ImportError:
-                st.error("moviepy 또는 pydub이 설치되지 않았어요. `pip install moviepy pydub` 실행해주세요.")
+            except ImportError as e:
+                st.error(f"패키지 오류: {e}")
             except Exception as e:
                 st.error(f"오류 발생: {e}")
 
