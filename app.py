@@ -592,21 +592,44 @@ with st.sidebar:
         if st.button("🔄 목소리 목록 불러오기", use_container_width=True, key="load_voices_btn"):
             try:
                 import requests as _req
-                # young-adult + middle-aged 한국어만 (빠름!)
+                # 한국어 목소리 전체 + 커스텀 목소리
                 all_voices = []
-                for age in ["young-adult", "middle-aged"]:
-                    params = {"language": "ko", "age": age}
+                # 일반 목소리 (한국어)
+                next_token = None
+                while True:
+                    params = {"language": "ko"}
+                    if next_token:
+                        params["page_token"] = next_token
                     resp = _req.get("https://supertoneapi.com/v1/voices/search", headers={"x-sup-api-key": supertone_key}, params=params)
                     if resp.status_code == 200:
-                        items = resp.json().get("items", [])
+                        data = resp.json()
+                        items = data.get("items", [])
                         all_voices.extend(items)
-                # 커스텀 목소리도 추가
-                resp3 = _req.get("https://supertoneapi.com/v1/custom-voices", headers={"x-sup-api-key": supertone_key})
-                if resp3.status_code == 200:
-                    custom = resp3.json().get("items", [])
-                    all_voices = all_voices + custom
+                        next_token = data.get("next_page_token")
+                        if not next_token or not items:
+                            break
+                    else:
+                        break
+                # 커스텀 목소리 (Soulless 등 클론보이스)
+                next_token2 = None
+                while True:
+                    params2 = {}
+                    if next_token2:
+                        params2["page_token"] = next_token2
+                    resp2 = _req.get("https://supertoneapi.com/v1/custom-voices", headers={"x-sup-api-key": supertone_key}, params=params2)
+                    if resp2.status_code == 200:
+                        data2 = resp2.json()
+                        custom = data2.get("items", [])
+                        for c in custom:
+                            c["name"] = f"⭐ {c.get('name', 'Custom')}"
+                        all_voices.extend(custom)
+                        next_token2 = data2.get("next_page_token")
+                        if not next_token2 or not custom:
+                            break
+                    else:
+                        break
                 st.session_state.supertone_voices = all_voices
-                st.success(f"✅ 목소리 {len(all_voices)}개 로드됨!")
+                st.success(f"✅ 목소리 {len(all_voices)}개 로드됨! (⭐는 내 커스텀 목소리)")
             except Exception as e:
                 st.error(f"오류: {e}")
     
@@ -615,8 +638,25 @@ with st.sidebar:
         selected_voice_name = st.selectbox("목소리 선택", list(voice_options.keys()), label_visibility="collapsed", key="voice_select")
         st.session_state.supertone_voice_id = voice_options[selected_voice_name]
         
-        supertone_style = st.selectbox("스타일", ["neutral", "happy", "sad", "angry", "surprised"], label_visibility="collapsed", key="supertone_style")
+        # 선택된 목소리 스타일 목록 동적으로
+        selected_voice_data = next((v for v in st.session_state.supertone_voices if (v.get("voice_id") or v.get("id")) == st.session_state.supertone_voice_id), None)
+        available_styles = selected_voice_data.get("styles", ["neutral"]) if selected_voice_data else ["neutral"]
+        if not available_styles:
+            available_styles = ["neutral"]
+        supertone_style = st.selectbox("스타일", available_styles, label_visibility="collapsed", key="supertone_style")
         supertone_speed = st.select_slider("배속", options=[0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.5], value=1.2, format_func=lambda x: f"{x}x", label_visibility="collapsed", key="supertone_speed")
+        sup_col1, sup_col2 = st.columns(2)
+        with sup_col1:
+            supertone_pitch = st.slider("음높이", -24, 24, 0, step=1, key="supertone_pitch")
+            st.caption(f"pitch_shift: {supertone_pitch}")
+        with sup_col2:
+            supertone_pitch_var = st.slider("음높이 변화", 0.0, 2.0, 1.0, step=0.1, key="supertone_pitch_var")
+            st.caption(f"pitch_variance: {supertone_pitch_var}")
+        # 미리듣기
+        if selected_voice_data and selected_voice_data.get("samples"):
+            sample = next((s for s in selected_voice_data["samples"] if s.get("language") == "ko"), selected_voice_data["samples"][0])
+            if sample.get("url"):
+                st.audio(sample["url"], format="audio/wav")
     else:
         st.caption("API 키 입력 후 목소리 목록을 불러오세요")
         supertone_style = "neutral"
@@ -912,36 +952,59 @@ if gen_btn:
         try:
             import requests as _req
             import os as _os
+            from pydub import AudioSegment as _AS
+            import tempfile as _tmp2
 
             tts_dir = _os.path.join(_os.path.expanduser("~"), "Downloads", "딩푸수_TTS")
             _os.makedirs(tts_dir, exist_ok=True)
 
             tts_prog = st.progress(0, text="🎙️ TTS 생성 중...")
-            tts_files = []
-            full_script = " ".join(all_cuts)
+            tts_segments = []
+            voice_id = st.session_state.supertone_voice_id
 
-            # 전체 대본을 하나의 음성으로 생성
-            with st.spinner("🎙️ 전체 음성 생성 중..."):
-                tts_resp = _req.post(
-                    f"https://supertoneapi.com/v1/text-to-speech/{st.session_state.supertone_voice_id}",
-                    headers={"x-sup-api-key": supertone_key, "Content-Type": "application/json"},
-                    json={
-                        "text": full_script,
-                        "language": "ko",
-                        "style": supertone_style,
-                        "model": "sona_speech_2",
-                        "speed": supertone_speed
-                    },
-                    timeout=120
-                )
-                if tts_resp.status_code == 200:
-                    tts_path = _os.path.join(tts_dir, f"voice_full.wav")
-                    with open(tts_path, "wb") as f:
-                        f.write(tts_resp.content)
-                    st.success(f"✅ 음성 생성 완료! → {tts_path}")
-                    st.session_state["tts_full_path"] = tts_path
-                else:
-                    st.error(f"TTS 오류: {tts_resp.status_code} — {tts_resp.text}")
+            # 300자 제한 → 구간별로 나눠서 생성 후 합치기
+            for idx, cut in enumerate(all_cuts):
+                # 300자 초과시 청크로 분할
+                chunks = [cut[i:i+280] for i in range(0, len(cut), 280)]
+                seg_audio = _AS.empty()
+                for chunk in chunks:
+                    tts_resp = _req.post(
+                        f"https://supertoneapi.com/v1/text-to-speech/{voice_id}",
+                        headers={"x-sup-api-key": supertone_key, "Content-Type": "application/json"},
+                        json={
+                            "text": chunk,
+                            "language": "ko",
+                            "style": supertone_style,
+                            "model": "sona_speech_2",
+                            "output_format": "wav",
+                            "voice_settings": {
+                                "pitch_shift": supertone_pitch,
+                                "pitch_variance": supertone_pitch_var,
+                                "speed": supertone_speed
+                            }
+                        },
+                        timeout=60
+                    )
+                    if tts_resp.status_code == 200:
+                        with _tmp2.NamedTemporaryFile(delete=False, suffix=".wav") as tf:
+                            tf.write(tts_resp.content)
+                            tf_path = tf.name
+                        seg_audio += _AS.from_wav(tf_path)
+                    else:
+                        st.warning(f"컷{idx+1} TTS 오류: {tts_resp.status_code}")
+                tts_segments.append(seg_audio)
+                tts_prog.progress((idx+1)/len(all_cuts), text=f"🎙️ TTS 생성 중... {idx+1}/{len(all_cuts)}")
+
+            # 전체 합치기
+            full_audio = tts_segments[0]
+            for seg in tts_segments[1:]:
+                full_audio += seg
+
+            tts_path = _os.path.join(tts_dir, f"voice_full.wav")
+            full_audio.export(tts_path, format="wav")
+            st.success(f"✅ 음성 생성 완료! {len(full_audio)/1000:.1f}초 → {tts_path}")
+            st.session_state["tts_full_path"] = tts_path
+            st.session_state["tts_cuts_durations"] = [len(seg)/1000 for seg in tts_segments]
         except Exception as e:
             st.error(f"TTS 오류: {e}")
 
@@ -982,9 +1045,13 @@ if gen_btn:
             audio_clip = AudioFileClip(tts_path)
             total_dur = audio_clip.duration
 
-            # 글자수 비율로 시간 배분
-            total_chars = sum(len(c) for c in all_cuts)
-            clip_durations = [total_dur * (len(c) / total_chars) for c in all_cuts]
+            # 실제 TTS 구간 시간으로 배분 (있으면), 없으면 글자수 비율
+            if st.session_state.get("tts_cuts_durations") and len(st.session_state["tts_cuts_durations"]) == len(images_out):
+                clip_durations = st.session_state["tts_cuts_durations"]
+                st.success("✅ TTS 실제 시간 기준 싱크 적용!")
+            else:
+                total_chars = sum(len(c) for c in all_cuts)
+                clip_durations = [total_dur * (len(c) / total_chars) for c in all_cuts]
 
             motion_list = _get_shuffled_motions(len(images_out))
             clips = []
