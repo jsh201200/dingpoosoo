@@ -1029,7 +1029,7 @@ if gen_btn:
     st.session_state["auto_zip_ready"] = True
 
     # ── 슈퍼톤 TTS + 이미지 → 자동 영상 합성 ──────────────────────
-    if st.session_state.get("tts_full_path") and _os.path.exists(st.session_state["tts_full_path"]):
+    if st.session_state.get("tts_full_path") and __import__("os").path.exists(st.session_state["tts_full_path"]):
         st.markdown("### 🎬 영상 자동 합성 중...")
         try:
             from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips
