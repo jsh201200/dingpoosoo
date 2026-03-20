@@ -10,6 +10,96 @@ from PIL import Image as _PILImage
 if not hasattr(_PILImage, 'ANTIALIAS'):
     _PILImage.ANTIALIAS = _PILImage.LANCZOS
 
+def _apply_motion(clip, mode):
+    """항상 화면 꽉 찬 상태로 시작, 5가지 패턴 + 줌"""
+    import random
+    w, h = clip.size
+    dur = clip.duration
+    SCALE = 1.25  # 항상 1.25배 크롭 상태로 시작
+
+    if mode == "none":
+        return clip
+
+    if mode == "random":
+        mode = random.choice([
+            "zoom_in", "zoom_out",
+            "pan_left", "pan_right",
+            "pan_up", "pan_down", "pan_diagonal"
+        ])
+
+    if mode == "zoom_in":
+        # 1.25 → 1.5 (항상 꽉 찬 상태)
+        def zoom(t): return 1.25 + 0.25 * (t / dur)
+        return clip.resize(zoom)
+
+    elif mode == "zoom_out":
+        # 1.5 → 1.25
+        def zoom(t): return 1.5 - 0.25 * (t / dur)
+        return clip.resize(zoom)
+
+    elif mode == "pan_left":
+        # 오른쪽에서 왼쪽으로
+        big = clip.resize(SCALE)
+        bw, bh = int(w * SCALE), int(h * SCALE)
+        max_x = bw - w
+        def pos(t): return (-int(max_x * (t / dur)), -int((bh - h) / 2))
+        return big.set_position(pos).set_duration(dur).crop(x1=0, y1=0, width=w, height=h)
+
+    elif mode == "pan_right":
+        # 왼쪽에서 오른쪽으로
+        big = clip.resize(SCALE)
+        bw, bh = int(w * SCALE), int(h * SCALE)
+        max_x = bw - w
+        def pos(t): return (-int(max_x * (1 - t / dur)), -int((bh - h) / 2))
+        return big.set_position(pos).set_duration(dur).crop(x1=0, y1=0, width=w, height=h)
+
+    elif mode == "pan_up":
+        # 아래에서 위로
+        big = clip.resize(SCALE)
+        bw, bh = int(w * SCALE), int(h * SCALE)
+        max_y = bh - h
+        def pos(t): return (-int((bw - w) / 2), -int(max_y * (t / dur)))
+        return big.set_position(pos).set_duration(dur).crop(x1=0, y1=0, width=w, height=h)
+
+    elif mode == "pan_down":
+        # 위에서 아래로
+        big = clip.resize(SCALE)
+        bw, bh = int(w * SCALE), int(h * SCALE)
+        max_y = bh - h
+        def pos(t): return (-int((bw - w) / 2), -int(max_y * (1 - t / dur)))
+        return big.set_position(pos).set_duration(dur).crop(x1=0, y1=0, width=w, height=h)
+
+    elif mode == "pan_diagonal":
+        # 사선 이동 (랜덤 방향)
+        import random as _r
+        dx = _r.choice([-1, 1])
+        dy = _r.choice([-1, 1])
+        big = clip.resize(SCALE)
+        bw, bh = int(w * SCALE), int(h * SCALE)
+        max_x = bw - w
+        max_y = bh - h
+        def pos(t):
+            px = -int((max_x / 2) + dx * (max_x / 2) * (t / dur))
+            py = -int((max_y / 2) + dy * (max_y / 2) * (t / dur))
+            return (px, py)
+        return big.set_position(pos).set_duration(dur).crop(x1=0, y1=0, width=w, height=h)
+
+    return clip
+
+
+def _get_shuffled_motions(n):
+    """n개 클립에 대해 5가지 패턴을 골고루 섞어서 반환"""
+    import random
+    patterns = ["zoom_in", "zoom_out", "pan_left", "pan_right", "pan_up", "pan_down", "pan_diagonal"]
+    result = []
+    while len(result) < n:
+        shuffled = patterns[:]
+        random.shuffle(shuffled)
+        result.extend(shuffled)
+    return result[:n]
+
+
+
 # ── 페이지 설정 ────────────────────────────────────────────────
 st.set_page_config(page_title="딩푸수 메이커", page_icon="🎬", layout="wide", initial_sidebar_state="expanded")
 
@@ -143,7 +233,8 @@ for k, v in [("cuts",[]),("sections",[]),("styles",[]),("prompts",[]),
              ("scenes",[]),("images",[]),("step",0),("errors",[]),
              ("regen_idx",None),("last_intro",""),("last_body",""),
              ("last_intro_sec",4),("last_body_sec",20),("last_tts",1.2),
-             ("auto_zip_ready",False),("auto_zip_data",None),("auto_zip_name","")]:
+             ("auto_zip_ready",False),("auto_zip_data",None),("auto_zip_name",""),
+             ("supertone_voices",[]),("supertone_voice_id","")]:
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -491,6 +582,37 @@ with st.sidebar:
     st.markdown("### ⚡ 병렬 작업")
     parallel_workers = st.slider("동시 작업 수", 1, 8, 4, step=1, label_visibility="collapsed")
     st.caption(f"{parallel_workers}개 동시 생성")
+    st.divider()
+
+    # 슈퍼톤 TTS
+    st.markdown("### 🎙️ 슈퍼톤 TTS (자동생성)")
+    supertone_key = st.text_input("Supertone API Key", type="password", placeholder="sup-...", label_visibility="collapsed", key="supertone_key_input")
+    if supertone_key:
+        st.success("✓ 연결됨", icon="✅")
+        if st.button("🔄 목소리 목록 불러오기", use_container_width=True, key="load_voices_btn"):
+            try:
+                import requests as _req
+                resp = _req.get("https://supertoneapi.com/v1/voices", headers={"x-sup-api-key": supertone_key})
+                if resp.status_code == 200:
+                    voices = resp.json()
+                    st.session_state.supertone_voices = voices if isinstance(voices, list) else voices.get("voices", [])
+                    st.success(f"✅ {len(st.session_state.supertone_voices)}개 목소리 로드됨!")
+                else:
+                    st.error(f"오류: {resp.status_code}")
+            except Exception as e:
+                st.error(f"오류: {e}")
+    
+    if st.session_state.supertone_voices:
+        voice_options = {f"{v.get('name','Unknown')} ({v.get('language','')})": v.get('voice_id') or v.get('id') for v in st.session_state.supertone_voices}
+        selected_voice_name = st.selectbox("목소리 선택", list(voice_options.keys()), label_visibility="collapsed", key="voice_select")
+        st.session_state.supertone_voice_id = voice_options[selected_voice_name]
+        
+        supertone_style = st.selectbox("스타일", ["neutral", "happy", "sad", "angry", "surprised"], label_visibility="collapsed", key="supertone_style")
+        supertone_speed = st.select_slider("배속", options=[0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.5], value=1.2, format_func=lambda x: f"{x}x", label_visibility="collapsed", key="supertone_speed")
+    else:
+        st.caption("API 키 입력 후 목소리 목록을 불러오세요")
+        supertone_style = "neutral"
+        supertone_speed = 1.2
 
 # ══════════════════════════════════════════════════════════════
 # 메인 영역
@@ -775,6 +897,46 @@ if gen_btn:
 
     st.session_state.images = images_out
 
+    # ── 슈퍼톤 TTS 자동 생성 ─────────────────────────────────────
+    if supertone_key and st.session_state.get("supertone_voice_id"):
+        st.markdown("---")
+        st.markdown("### 🎙️ 슈퍼톤 TTS 자동 생성 중...")
+        try:
+            import requests as _req
+            import os as _os
+
+            tts_dir = _os.path.join(_os.path.expanduser("~"), "Downloads", "딩푸수_TTS")
+            _os.makedirs(tts_dir, exist_ok=True)
+
+            tts_prog = st.progress(0, text="🎙️ TTS 생성 중...")
+            tts_files = []
+            full_script = " ".join(all_cuts)
+
+            # 전체 대본을 하나의 음성으로 생성
+            with st.spinner("🎙️ 전체 음성 생성 중..."):
+                tts_resp = _req.post(
+                    f"https://supertoneapi.com/v1/text-to-speech/{st.session_state.supertone_voice_id}",
+                    headers={"x-sup-api-key": supertone_key, "Content-Type": "application/json"},
+                    json={
+                        "text": full_script,
+                        "language": "ko",
+                        "style": supertone_style,
+                        "model": "sona_speech_2",
+                        "speed": supertone_speed
+                    },
+                    timeout=120
+                )
+                if tts_resp.status_code == 200:
+                    tts_path = _os.path.join(tts_dir, f"voice_full.wav")
+                    with open(tts_path, "wb") as f:
+                        f.write(tts_resp.content)
+                    st.success(f"✅ 음성 생성 완료! → {tts_path}")
+                    st.session_state["tts_full_path"] = tts_path
+                else:
+                    st.error(f"TTS 오류: {tts_resp.status_code} — {tts_resp.text}")
+        except Exception as e:
+            st.error(f"TTS 오류: {e}")
+
     # ── 자동 ZIP 생성 & 즉시 다운로드 ───────────────────────────
     _auto_title = (
         project_title.strip()
@@ -800,6 +962,53 @@ if gen_btn:
     st.session_state["auto_zip_data"]  = _zip_buf.getvalue()
     st.session_state["auto_zip_name"]  = f"{_safe_title}.zip"
     st.session_state["auto_zip_ready"] = True
+
+    # ── 슈퍼톤 TTS + 이미지 → 자동 영상 합성 ──────────────────────
+    if st.session_state.get("tts_full_path") and _os.path.exists(st.session_state["tts_full_path"]):
+        st.markdown("### 🎬 영상 자동 합성 중...")
+        try:
+            from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips
+            import tempfile as _tmp, time as _time2
+
+            tts_path = st.session_state["tts_full_path"]
+            audio_clip = AudioFileClip(tts_path)
+            total_dur = audio_clip.duration
+
+            # 글자수 비율로 시간 배분
+            total_chars = sum(len(c) for c in all_cuts)
+            clip_durations = [total_dur * (len(c) / total_chars) for c in all_cuts]
+
+            motion_list = _get_shuffled_motions(len(images_out))
+            clips = []
+            auto_prog = st.progress(0, text="클립 생성 중...")
+            for idx, img in enumerate(images_out):
+                if img is None:
+                    continue
+                dur = clip_durations[idx] if idx < len(clip_durations) else total_dur / len(images_out)
+                buf = io.BytesIO()
+                img.save(buf, format="PNG")
+                buf.seek(0)
+                with _tmp.NamedTemporaryFile(delete=False, suffix=".png") as tf:
+                    tf.write(buf.read())
+                    tp = tf.name
+                clip = ImageClip(tp, duration=dur).set_fps(30)
+                clip = _apply_motion(clip, motion_list[idx])
+                clips.append(clip)
+                auto_prog.progress((idx+1)/len(images_out), text=f"클립 생성 {idx+1}/{len(images_out)}")
+
+            import os as _os2
+            auto_out = _os2.path.join(_os2.path.expanduser("~"), "Downloads", f"딩푸수_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4")
+            est = int(total_dur * 0.8)
+            m, s = divmod(est, 60)
+            render_info = st.info(f"⚙️ 렌더링 중... (예상 {'%d분 %d초' % (m,s) if m else '%d초' % s} 소요)")
+            final_clip = concatenate_videoclips(clips, method="compose").set_audio(audio_clip)
+            final_clip.write_videofile(auto_out, fps=30, codec="libx264", audio_codec="aac", threads=4, logger=None)
+            render_info.success(f"✅ 렌더링 완료!")
+            st.balloons()
+            st.success(f"🎉🎉 완전 자동화 완성!! → {auto_out}")
+            st.session_state["tts_full_path"] = None
+        except Exception as e:
+            st.error(f"영상 합성 오류: {e}")
 
     st.rerun()
 
@@ -1181,7 +1390,7 @@ with video_tab3:
     else:
         st.caption("대본 없으면 이미지 균등 분배로 진행해요.")
 
-    later_kb = st.selectbox("🎥 Ken Burns 효과", ["랜덤 (자동)", "줌인만", "줌아웃만", "좌→우 패닝", "우→좌 패닝", "없음"], key="later_kb")
+    later_kb = st.selectbox("🎥 Ken Burns 효과", ["랜덤 (자동)", "줌인만", "줌아웃만", "좌→우 패닝", "우→좌 패닝", "위→아래", "아래→위", "사선", "없음"], key="later_kb")
 
     if later_script:
         later_sync_col1, later_sync_col2, later_sync_col3 = st.columns(3)
@@ -1289,23 +1498,14 @@ with video_tab3:
 
                 import time as _time
                 with st.spinner("🎬 영상 생성 중..."):
-                    kb_map = {"랜덤 (자동)": "random", "줌인만": "zoom_in", "줌아웃만": "zoom_out", "좌→우 패닝": "pan_left", "우→좌 패닝": "pan_right", "없음": "none"}
-                    kb_mode = kb_map[later_kb]
+                    kb_map = {"랜덤 (자동)": "random", "줌인만": "zoom_in", "줌아웃만": "zoom_out", "좌→우 패닝": "pan_right", "우→좌 패닝": "pan_left", "위→아래": "pan_down", "아래→위": "pan_up", "사선": "pan_diagonal", "없음": "none"}
+                    kb_mode = kb_map.get(later_kb, "random")
 
-                    def apply_kb2(clip, mode):
-                        if mode == "none": return clip
-                        if mode == "random": mode = random.choice(["zoom_in","zoom_out","pan_left","pan_right"])
-                        w, h = clip.size
-                        dur = clip.duration
-                        if mode == "zoom_in": return clip.resize(lambda t: 1.0+0.25*(t/dur))
-                        elif mode == "zoom_out": return clip.resize(lambda t: 1.25-0.25*(t/dur))
-                        elif mode == "pan_left":
-                            big=clip.resize(1.16)
-                            return big.set_position(lambda t:(-int(w*0.08*(t/dur)),0)).set_duration(dur).crop(x1=0,y1=0,width=w,height=h)
-                        elif mode == "pan_right":
-                            big=clip.resize(1.16)
-                            return big.set_position(lambda t:(int(w*0.08*(t/dur)),0)).set_duration(dur).crop(x1=0,y1=0,width=w,height=h)
-                        return clip
+                    # 랜덤이면 7가지 패턴 골고루 셔플
+                    if kb_mode == "random":
+                        motion_list = _get_shuffled_motions(len(img_paths))
+                    else:
+                        motion_list = [kb_mode] * len(img_paths)
 
                     # 1단계: 클립 생성 (진행바 + 시간 예측)
                     clips = []
@@ -1315,7 +1515,7 @@ with video_tab3:
                     for idx, img_path in enumerate(img_paths):
                         dur = clip_durations[idx] if idx < len(clip_durations) else total_dur / len(img_paths)
                         clip = ImageClip(img_path, duration=dur).set_fps(30)
-                        clip = apply_kb2(clip, kb_mode)
+                        clip = _apply_motion(clip, motion_list[idx])
                         clips.append(clip)
                         elapsed = _time.time() - clip_start
                         done_ratio = (idx+1) / len(img_paths)
