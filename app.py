@@ -137,7 +137,8 @@ LANGUAGE_SETTINGS = {
 for k, v in [("cuts",[]),("sections",[]),("styles",[]),("prompts",[]),
              ("scenes",[]),("images",[]),("step",0),("errors",[]),
              ("regen_idx",None),("last_intro",""),("last_body",""),
-             ("last_intro_sec",4),("last_body_sec",20),("last_tts",1.2)]:
+             ("last_intro_sec",4),("last_body_sec",20),("last_tts",1.2),
+             ("auto_zip_ready",False),("auto_zip_data",None),("auto_zip_name","")]:
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -472,7 +473,7 @@ with st.sidebar:
     aspect_ratio = st.radio(
         "비율 선택",
         options=["16:9", "1:1", "9:16"],
-        index=0,
+        index=1,
         horizontal=True,
         label_visibility="collapsed",
         help="16:9 유튜브 썸네일 · 1:1 SNS · 9:16 쇼츠/릴스"
@@ -502,7 +503,7 @@ st.markdown("---")
 
 # 입력 영역 — 인트로 / 본문 2칸
 INTRO_MAX = 400
-BODY_MAX  = 12000
+BODY_MAX  = 14000
 col_intro, col_body = st.columns(2)
 with col_intro:
     st.markdown("**🎬 인트로 스크립트**")
@@ -769,40 +770,33 @@ if gen_btn:
 
     st.session_state.images = images_out
 
-    # ── 자동 라이브러리 저장 ──────────────────────────────────
+    # ── 자동 ZIP 생성 & 즉시 다운로드 ───────────────────────────
     _auto_title = (
         project_title.strip()
         or (all_cuts[0][:20] if all_cuts else "작업")
     )
-    _auto_items = []
-    for _i, (_cut, _img) in enumerate(zip(all_cuts, images_out)):
-        _img_b64 = ""
-        if _img:
-            _buf = io.BytesIO(); _img.save(_buf, format="PNG")
-            _img_b64 = base64.b64encode(_buf.getvalue()).decode()
-        _auto_items.append({
-            "cut": _cut,
-            "img": _img_b64,
-            "section": all_sections[_i] if _i < len(all_sections) else "body"
-        })
-    _auto_entry = {
-        "id": str(int(datetime.datetime.now().timestamp() * 1000)),
-        "title": _auto_title,
-        "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "expire": (datetime.datetime.now() + datetime.timedelta(days=2)).timestamp(),
-        "items": _auto_items,
-    }
-    _auto_json = json.dumps(_auto_entry, ensure_ascii=False)
-    st.components.v1.html(f"""<script>
-(function(){{
-  var key='imggen_library';
-  var arr=JSON.parse(localStorage.getItem(key)||'[]');
-  var now=Date.now()/1000;
-  arr=arr.filter(function(e){{return e.expire>now;}});
-  arr.unshift({_auto_json});
-  localStorage.setItem(key,JSON.stringify(arr));
-}})();
-</script>""", height=0)
+    import re as _re
+    _safe_title = _re.sub(r'[\/*?:"<>|]', '', _auto_title).strip()[:30] or "딩푸수메이커"
+
+    _zip_buf = io.BytesIO()
+    with zipfile.ZipFile(_zip_buf, "w") as _zf:
+        for _i, (_img, _cut) in enumerate(zip(images_out, all_cuts)):
+            if _img:
+                _b = io.BytesIO()
+                _img.save(_b, format="PNG")
+                _zf.writestr(f"scene_{_i+1:02d}.png", _b.getvalue())
+        _script_lines = [f"딩푸수 메이커 — {_auto_title}", "=" * 40, ""]
+        for _i, (_cut, _sec) in enumerate(zip(all_cuts, all_sections)):
+            _label = "인트로" if _sec == "intro" else "본문"
+            _script_lines.append(f"[scene_{_i+1:02d}] [{_label}]")
+            _script_lines.append(_cut)
+            _script_lines.append("")
+        _zf.writestr("대본_목록.txt", "
+".join(_script_lines).encode("utf-8"))
+
+    st.session_state["auto_zip_data"]  = _zip_buf.getvalue()
+    st.session_state["auto_zip_name"]  = f"{_safe_title}.zip"
+    st.session_state["auto_zip_ready"] = True
 
     st.rerun()
 
@@ -816,6 +810,28 @@ if st.session_state.regen_idx is not None and api_key:
     with st.spinner(f"컷 {idx+1} 재생성 중..."):
         regen_single(client, idx, style_prefix, character_b64, language, aspect_ratio)
     st.rerun()
+
+# ══════════════════════════════════════════════════════════════
+# 자동 ZIP 다운로드 배너
+# ══════════════════════════════════════════════════════════════
+if st.session_state.get("auto_zip_ready") and st.session_state.get("auto_zip_data"):
+    st.balloons()
+    st.success("🎉 이미지 생성 완료! ZIP 파일을 바로 받으세요!")
+    st.download_button(
+        "📦 ⬇️ ZIP 지금 바로 다운로드 (이미지 + 대본 목록)",
+        data=st.session_state["auto_zip_data"],
+        file_name=st.session_state["auto_zip_name"],
+        mime="application/zip",
+        type="primary",
+        use_container_width=True,
+        key="auto_zip_dl"
+    )
+    st.caption("⚠️ 새로고침하면 사라져요 — 지금 바로 받으세요!")
+    if st.button("✅ 받았어요", key="zip_confirm", use_container_width=False):
+        st.session_state["auto_zip_ready"] = False
+        st.session_state["auto_zip_data"]  = None
+        st.rerun()
+    st.markdown("---")
 
 # ══════════════════════════════════════════════════════════════
 # 결과 출력
@@ -916,6 +932,361 @@ if st.session_state.step >= 1 and cuts:
 # ══════════════════════════════════════════════════════════════
 # 라이브러리 (localStorage)
 # ══════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════
+# 🎬 영상 만들기 탭
+# ══════════════════════════════════════════════════════════════
+st.markdown("---")
+st.markdown("## 🎬 영상 만들기")
+st.caption("생성된 이미지 + 음성파일을 합쳐서 mp4를 만들어요. ffmpeg이 설치된 환경에서 실행하세요.")
+
+with st.expander("📖 사용 방법", expanded=False):
+    st.markdown("""
+1. **1단계:** 슈퍼톤 음성파일 무음 제거 스크립트 받아서 실행
+2. **2단계:** 딩푸수 이미지 ZIP 다운로드 후 압축 해제
+3. **3단계:** 이미지 폴더 + 무음 제거된 음성파일 경로 입력
+4. **4단계:** 영상 제작 스크립트 받아서 실행 → mp4 완성
+
+**필요한 패키지:** `pip install moviepy pillow pydub`
+""")
+
+# ── 1단계: 무음 제거 ──────────────────────────────────────────
+st.markdown("### ✂️ 1단계: 음성 무음 제거")
+st.caption("슈퍼톤 TTS 음성의 무음 구간을 0.2초로 줄여줘요. 먼저 이걸 실행하세요.")
+
+sil_col1, sil_col2 = st.columns(2)
+with sil_col1:
+    silence_input_path = st.text_input(
+        "원본 음성파일 경로",
+        placeholder="예: C:/Users/나/Downloads/voice.mp3",
+        key="silence_input_path"
+    )
+with sil_col2:
+    silence_output_path = st.text_input(
+        "출력 음성파일 경로",
+        placeholder="예: C:/Users/나/Downloads/voice_trimmed.mp3",
+        key="silence_output_path"
+    )
+
+if st.button("✂️ 무음 제거 스크립트 생성", use_container_width=True, key="gen_silence_script"):
+    if not silence_input_path or not silence_output_path:
+        st.error("입력/출력 경로를 모두 입력해주세요.")
+    else:
+        silence_script = f'''#!/usr/bin/env python3
+# 딩푸수 메이커 — 무음 제거 스크립트
+# pip install pydub 필요
+# ffmpeg도 설치 필요: https://ffmpeg.org/download.html
+
+from pydub import AudioSegment, silence
+
+INPUT_FILE  = r"{silence_input_path}"
+OUTPUT_FILE = r"{silence_output_path}"
+
+KEEP_SILENCE_MS = 200   # 무음 구간을 0.2초로 줄이기
+MIN_SILENCE_MS  = 400   # 0.4초 이상 무음만 감지
+SILENCE_THRESH  = -40   # dB 기준 (더 낮추면 더 민감하게 감지)
+
+print(f"📂 파일 불러오는 중: {{INPUT_FILE}}")
+audio = AudioSegment.from_file(INPUT_FILE)
+original_duration = len(audio) / 1000
+print(f"⏱ 원본 길이: {{original_duration:.1f}}초")
+
+print("✂️ 무음 구간 감지 중...")
+chunks = silence.split_on_silence(
+    audio,
+    min_silence_len=MIN_SILENCE_MS,
+    silence_thresh=SILENCE_THRESH,
+    keep_silence=KEEP_SILENCE_MS,
+)
+
+if not chunks:
+    print("⚠️ 무음 구간을 찾지 못했어요. SILENCE_THRESH 값을 낮춰보세요 (예: -50)")
+    chunks = [audio]
+
+print(f"✅ {{len(chunks)}}개 구간 감지됨")
+
+output = chunks[0]
+for chunk in chunks[1:]:
+    output += chunk
+
+trimmed_duration = len(output) / 1000
+saved = original_duration - trimmed_duration
+print(f"⏱ 처리 후 길이: {{trimmed_duration:.1f}}초 ({{saved:.1f}}초 단축)")
+
+output.export(OUTPUT_FILE, format="mp3", bitrate="192k")
+print(f"\\n✅ 완성! → {{OUTPUT_FILE}}")
+'''
+        st.success("✅ 무음 제거 스크립트 생성 완료!")
+        st.code(silence_script, language="python")
+        st.download_button(
+            "⬇️ remove_silence.py 다운로드",
+            silence_script.encode("utf-8"),
+            "remove_silence.py",
+            "text/x-python",
+            use_container_width=True,
+            key="dl_silence_script"
+        )
+        st.markdown("""
+**실행 방법:**
+```
+pip install pydub
+python remove_silence.py
+```
+> ffmpeg도 필요해요 → [ffmpeg 다운로드](https://ffmpeg.org/download.html)
+""")
+
+st.markdown("---")
+st.markdown("### 🎬 2단계: 영상 합치기")
+st.caption("무음 제거된 음성 + 이미지를 합쳐서 mp4를 만들어요.")
+
+vid_col1, vid_col2 = st.columns(2)
+
+with vid_col1:
+    st.markdown("**📁 이미지 폴더 경로**")
+    img_folder_path = st.text_input(
+        "이미지폴더", label_visibility="collapsed",
+        placeholder="예: C:/Users/나/Downloads/딩푸수이미지",
+        key="img_folder_path"
+    )
+    st.caption("ZIP 압축 푼 폴더 경로를 붙여넣으세요 (scene_01.png, scene_02.png ... 형식)")
+
+with vid_col2:
+    st.markdown("**🔊 음성파일 경로 (슈퍼톤 TTS)**")
+    audio_file_path = st.text_input(
+        "음성파일", label_visibility="collapsed",
+        placeholder="예: C:/Users/나/Downloads/voice.mp3",
+        key="audio_file_path"
+    )
+    st.caption("슈퍼톤에서 뽑은 전체 음성파일 경로")
+
+vid_col3, vid_col4 = st.columns(2)
+with vid_col3:
+    ken_burns_style = st.selectbox(
+        "🎥 Ken Burns 효과",
+        ["랜덤 (자동)", "줌인만", "줌아웃만", "좌→우 패닝", "우→좌 패닝", "없음"],
+        key="ken_burns_style"
+    )
+with vid_col4:
+    output_video_path = st.text_input(
+        "💾 출력 파일 경로",
+        placeholder="예: C:/Users/나/Downloads/final.mp4",
+        key="output_video_path"
+    )
+
+n_images_for_video = len([img for img in st.session_state.get("images", []) if img]) if st.session_state.get("images") else 0
+if n_images_for_video > 0:
+    st.info(f"현재 세션에 생성된 이미지 {n_images_for_video}개 감지됨 ✅")
+
+if st.button("🎬 영상 제작 스크립트 생성", type="primary", use_container_width=True, key="gen_video_script"):
+    if not img_folder_path or not audio_file_path or not output_video_path:
+        st.error("이미지 폴더, 음성파일, 출력 경로를 모두 입력해주세요.")
+    else:
+        kb_map = {
+            "랜덤 (자동)": "random",
+            "줌인만": "zoom_in",
+            "줌아웃만": "zoom_out",
+            "좌→우 패닝": "pan_left",
+            "우→좌 패닝": "pan_right",
+            "없음": "none",
+        }
+        kb_mode = kb_map[ken_burns_style]
+
+        script_code = f'''#!/usr/bin/env python3
+# 딩푸수 메이커 — 영상 자동 제작 스크립트
+# pip install moviepy pillow 필요
+
+import os, glob, random
+from moviepy.editor import (
+    ImageClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
+)
+from moviepy.video.fx.all import resize
+import numpy as np
+from PIL import Image
+
+IMG_FOLDER  = r"{img_folder_path}"
+AUDIO_FILE  = r"{audio_file_path}"
+OUTPUT_FILE = r"{output_video_path}"
+KB_MODE     = "{kb_mode}"   # zoom_in / zoom_out / pan_left / pan_right / random / none
+FPS         = 30
+
+def apply_ken_burns(clip, mode="random"):
+    """이미지 클립에 Ken Burns 효과 적용"""
+    if mode == "none":
+        return clip
+    if mode == "random":
+        mode = random.choice(["zoom_in", "zoom_out", "pan_left", "pan_right"])
+
+    w, h = clip.size
+    duration = clip.duration
+
+    if mode == "zoom_in":
+        def zoom(t):
+            scale = 1.0 + 0.04 * (t / duration)
+            return scale
+        return clip.resize(zoom)
+
+    elif mode == "zoom_out":
+        def zoom(t):
+            scale = 1.04 - 0.04 * (t / duration)
+            return scale
+        return clip.resize(zoom)
+
+    elif mode == "pan_left":
+        def pos(t):
+            x = -int(w * 0.03 * (t / duration))
+            return (x, 0)
+        big = clip.resize(1.06)
+        return big.set_position(pos).set_duration(duration).crop(x1=0, y1=0, width=w, height=h)
+
+    elif mode == "pan_right":
+        def pos(t):
+            x = int(w * 0.03 * (t / duration))
+            return (x, 0)
+        big = clip.resize(1.06)
+        return big.set_position(pos).set_duration(duration).crop(x1=0, y1=0, width=w, height=h)
+
+    return clip
+
+def main():
+    # 이미지 파일 목록 (scene_01.png 순서대로)
+    exts = ["*.png", "*.jpg", "*.jpeg"]
+    imgs = []
+    for ext in exts:
+        imgs += glob.glob(os.path.join(IMG_FOLDER, ext))
+    imgs = sorted(imgs)
+
+    if not imgs:
+        print("❌ 이미지 파일을 찾을 수 없어요. 폴더 경로를 확인하세요.")
+        return
+
+    print(f"✅ 이미지 {{len(imgs)}}개 발견")
+
+    # 음성 파일 로드 & 길이 측정
+    audio = AudioFileClip(AUDIO_FILE)
+    total_duration = audio.duration
+    per_clip = total_duration / len(imgs)
+
+    print(f"✅ 음성 길이: {{total_duration:.1f}}초 → 이미지당 {{per_clip:.1f}}초")
+
+    # 각 이미지 → 클립 변환
+    clips = []
+    for i, img_path in enumerate(imgs):
+        clip = ImageClip(img_path, duration=per_clip)
+        clip = clip.set_fps(FPS)
+        kb = KB_MODE
+        if kb == "random":
+            kb = random.choice(["zoom_in", "zoom_out", "pan_left", "pan_right"])
+        clip = apply_ken_burns(clip, kb)
+        clips.append(clip)
+        print(f"  🎬 {{i+1}}/{{len(imgs)}} 처리 중...")
+
+    # 클립 이어붙이기
+    final = concatenate_videoclips(clips, method="compose")
+    final = final.set_audio(audio)
+
+    print(f"\\n⚙️ 영상 렌더링 중... (잠깐 기다려요)")
+    final.write_videofile(
+        OUTPUT_FILE,
+        fps=FPS,
+        codec="libx264",
+        audio_codec="aac",
+        threads=4,
+        logger="bar"
+    )
+    print(f"\\n✅ 완성! → {{OUTPUT_FILE}}")
+
+if __name__ == "__main__":
+    main()
+'''
+
+        st.success("✅ 스크립트 생성 완료!")
+        st.code(script_code, language="python")
+        st.download_button(
+            "⬇️ make_video.py 다운로드",
+            script_code.encode("utf-8"),
+            "make_video.py",
+            "text/x-python",
+            use_container_width=True
+        )
+        st.markdown("""
+**실행 방법:**
+```
+pip install moviepy pillow
+python make_video.py
+```
+""")
+
+        # 타임코드 목록 생성 (현재 세션 이미지 기준)
+        st.markdown("---")
+        st.markdown("### 📋 캡컷용 타임코드 목록")
+        st.caption("캡컷에서 이미지를 타임라인에 배치할 때 이 시간표를 참고하세요.")
+
+        if st.session_state.get("images") and st.session_state.get("cuts"):
+            n_imgs = len([img for img in st.session_state["images"] if img])
+            if n_imgs > 0 and audio_file_path:
+                timecode_lines = [
+                    "딩푸수 메이커 — 캡컷용 타임코드 목록",
+                    "=" * 45,
+                    f"총 이미지: {n_imgs}개",
+                    f"음성파일: {audio_file_path}",
+                    "",
+                    "※ 음성 파일 길이를 이미지 수로 나눈 예상 시간입니다.",
+                    "※ 실제 음성 길이에 따라 약간 달라질 수 있어요.",
+                    "",
+                    f"{'씬':<8} {'시작':<12} {'끝':<12} {'길이':<10} 대본",
+                    "-" * 70,
+                ]
+                cuts_list = st.session_state["cuts"]
+                # 음성 길이 모르니까 이미지당 예상 시간 안내
+                st.info("⚠️ 음성파일 길이는 로컬에서 스크립트 실행 시 자동 계산돼요. 아래는 대본 기준 예상 타임코드예요.")
+
+                # 글자수 기반 예상 시간 계산
+                total_chars = sum(len(c) for c in cuts_list)
+                elapsed = 0.0
+                for i, cut in enumerate(cuts_list):
+                    ratio = len(cut) / total_chars if total_chars > 0 else 1/len(cuts_list)
+                    # 실제는 스크립트에서 계산되지만 여기선 비율로 예상
+                    clip_dur_est = ratio  # 비율만 저장
+                    timecode_lines.append(f"scene_{i+1:02d}  (비율 {ratio*100:.1f}%)  {cut[:35]}{'...' if len(cut)>35 else ''}")
+
+                timecode_lines += [
+                    "",
+                    "=" * 45,
+                    "캡컷 사용법:",
+                    "1. 캡컷 새 프로젝트 열기 (9:16 비율)",
+                    "2. 음성파일 먼저 타임라인에 추가",
+                    "3. 이미지들을 순서대로 타임라인에 추가",
+                    "4. 각 이미지 길이를 위 타임코드에 맞게 조정",
+                    "5. 이미지 교체 필요시 해당 클립만 교체",
+                ]
+
+                timecode_txt = "\n".join(timecode_lines)
+                st.code(timecode_txt, language="text")
+                st.download_button(
+                    "⬇️ 타임코드 목록.txt 다운로드",
+                    timecode_txt.encode("utf-8"),
+                    "타임코드_목록.txt",
+                    "text/plain",
+                    use_container_width=True
+                )
+
+                # 캡컷 임포트용 이미지 순서 목록도 제공
+                img_order_lines = ["# 캡컷 이미지 순서 목록\n"]
+                for i, cut in enumerate(cuts_list):
+                    sec = st.session_state["sections"][i] if i < len(st.session_state.get("sections",[])) else "body"
+                    img_order_lines.append(f"scene_{i+1:02d}.png  [{('인트로' if sec=='intro' else '본문')}]  {cut[:50]}")
+                img_order_txt = "\n".join(img_order_lines)
+                st.download_button(
+                    "⬇️ 이미지순서_목록.txt 다운로드",
+                    img_order_txt.encode("utf-8"),
+                    "이미지순서_목록.txt",
+                    "text/plain",
+                    use_container_width=True
+                )
+            else:
+                st.info("이미지 생성 후 음성 경로를 입력하면 타임코드 목록이 생성돼요.")
+        else:
+            st.info("먼저 이미지를 생성하면 타임코드 목록을 받을 수 있어요.")
+
 if st.session_state.step >= 3 and cuts:
     st.markdown("---")
     st.markdown("### 💾 라이브러리에 저장")
