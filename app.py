@@ -951,11 +951,10 @@ with video_tab1:
         st.caption(f"무음 구간을 {local_keep_silence}ms({local_keep_silence/1000}초)로 줄여요")
 
     st.markdown("#### 🎥 영상 설정")
-    local_vid_col1, local_vid_col2 = st.columns(2)
-    with local_vid_col1:
-        local_kb_style = st.selectbox("Ken Burns 효과", ["랜덤 (자동)", "줌인만", "줌아웃만", "좌→우 패닝", "우→좌 패닝", "없음"], key="local_kb_style")
-    with local_vid_col2:
-        local_output_path = st.text_input("💾 출력 mp4 경로", placeholder="예: C:/Users/나/Downloads/final.mp4", key="local_output_path")
+    local_kb_style = st.selectbox("Ken Burns 효과", ["랜덤 (자동)", "줌인만", "줌아웃만", "좌→우 패닝", "우→좌 패닝", "없음"], key="local_kb_style")
+    import os as _os
+    local_output_path = _os.path.join(_os.path.expanduser("~"), "Downloads", f"딩푸수_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4")
+    st.info(f"💾 저장 위치: {local_output_path}")
 
     n_imgs_local = len([img for img in st.session_state.get("images", []) if img])
     if n_imgs_local > 0:
@@ -966,8 +965,6 @@ with video_tab1:
     if st.button("🎬 영상 자동 생성 시작", type="primary", use_container_width=True, key="local_gen_btn"):
         if not local_audio_file:
             st.error("음성파일을 업로드해주세요.")
-        elif not local_output_path:
-            st.error("출력 경로를 입력해주세요.")
         elif n_imgs_local == 0:
             st.error("먼저 이미지를 생성해주세요.")
         else:
@@ -1165,17 +1162,16 @@ with video_tab3:
         if later_audio:
             st.success(f"✅ {later_audio.name} 업로드됨")
 
-    later_col3, later_col4 = st.columns(2)
-    with later_col3:
-        later_kb = st.selectbox("🎥 Ken Burns 효과", ["랜덤 (자동)", "줌인만", "줌아웃만", "좌→우 패닝", "우→좌 패닝", "없음"], key="later_kb")
-    with later_col4:
-        later_output = st.text_input("💾 출력 mp4 경로", placeholder="예: C:/Users/나/Downloads/final.mp4", key="later_output")
+    later_kb = st.selectbox("🎥 Ken Burns 효과", ["랜덤 (자동)", "줌인만", "줌아웃만", "좌→우 패닝", "우→좌 패닝", "없음"], key="later_kb")
+    import os as _os
+    later_output = _os.path.join(_os.path.expanduser("~"), "Downloads", f"딩푸수_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4")
+    st.info(f"💾 저장 위치: {later_output}")
 
     later_silence = st.slider("무음 유지 길이 (ms)", 100, 500, 200, step=50, key="later_silence")
 
     if st.button("🎬 영상 생성 시작", type="primary", use_container_width=True, key="later_gen_btn"):
-        if not later_zip or not later_audio or not later_output:
-            st.error("ZIP 파일, 음성파일, 출력 경로를 모두 입력해주세요.")
+        if not later_zip or not later_audio:
+            st.error("ZIP 파일과 음성파일을 업로드해주세요.")
         else:
             try:
                 from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips
