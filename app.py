@@ -915,7 +915,7 @@ if gen_btn:
                     time.sleep(2)
             except Exception as e:
                 if attempt < 2:
-                    time.sleep(3)  # 재시도 전 3초 대기
+                    time.sleep(10)  # 재시도 전 10초 대기
                 else:
                     return i, None, str(e)
         return i, None, "3회 시도 후 실패"
@@ -938,6 +938,12 @@ if gen_btn:
                     placeholders[i].warning(f"❌ 컷 {i+1} 생성 실패")
 
     st.session_state.images = images_out
+
+    # 이미지 성공 여부 확인
+    ok_count = sum(1 for img in images_out if img is not None)
+    if ok_count == 0:
+        st.error("❌ 이미지 생성이 전부 실패했어요. Gemini 서버가 혼잡합니다. 잠시 후 다시 시도해주세요!")
+        st.stop()
 
     # ── 슈퍼톤 TTS 자동 생성 ─────────────────────────────────────
     if supertone_key and st.session_state.get("supertone_voice_id"):
@@ -1010,6 +1016,7 @@ if gen_btn:
     import re as _re
     _safe_title = _re.sub(r'[\/*?:"<>|]', '', _auto_title).strip()[:30] or "딩푸수메이커"
 
+    # 이미지 있는 컷만 ZIP에 포함
     _zip_buf = io.BytesIO()
     with zipfile.ZipFile(_zip_buf, "w") as _zf:
         for _i, (_img, _cut) in enumerate(zip(images_out, all_cuts)):
