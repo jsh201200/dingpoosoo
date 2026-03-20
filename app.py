@@ -592,14 +592,14 @@ with st.sidebar:
         if st.button("🔄 목소리 목록 불러오기", use_container_width=True, key="load_voices_btn"):
             try:
                 import requests as _req
-                # 페이지네이션으로 전체 목소리 가져오기
+                # 한국어 목소리만 검색 (빠름!)
                 all_voices = []
                 next_token = None
                 while True:
-                    params = {}
+                    params = {"language": "ko"}
                     if next_token:
                         params["page_token"] = next_token
-                    resp = _req.get("https://supertoneapi.com/v1/voices", headers={"x-sup-api-key": supertone_key}, params=params)
+                    resp = _req.get("https://supertoneapi.com/v1/voices/search", headers={"x-sup-api-key": supertone_key}, params=params)
                     if resp.status_code == 200:
                         data = resp.json()
                         items = data.get("items", [])
@@ -608,16 +608,18 @@ with st.sidebar:
                         if not next_token or not items:
                             break
                     else:
-                        st.error(f"오류: {resp.status_code} — {resp.text}")
+                        # 검색 실패시 전체 첫 페이지만
+                        resp2 = _req.get("https://supertoneapi.com/v1/voices", headers={"x-sup-api-key": supertone_key})
+                        if resp2.status_code == 200:
+                            all_voices = resp2.json().get("items", [])
                         break
-                # 커스텀 목소리도 불러오기
-                resp2 = _req.get("https://supertoneapi.com/v1/custom-voices", headers={"x-sup-api-key": supertone_key})
-                if resp2.status_code == 200:
-                    data2 = resp2.json()
-                    custom = data2.get("items", []) if isinstance(data2, dict) else []
+                # 커스텀 목소리도 추가
+                resp3 = _req.get("https://supertoneapi.com/v1/custom-voices", headers={"x-sup-api-key": supertone_key})
+                if resp3.status_code == 200:
+                    custom = resp3.json().get("items", [])
                     all_voices = all_voices + custom
                 st.session_state.supertone_voices = all_voices
-                st.success(f"✅ {len(all_voices)}개 목소리 로드됨!")
+                st.success(f"✅ 한국어 목소리 {len(all_voices)}개 로드됨!")
             except Exception as e:
                 st.error(f"오류: {e}")
     
