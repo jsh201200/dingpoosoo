@@ -594,16 +594,23 @@ with st.sidebar:
                 import requests as _req
                 resp = _req.get("https://supertoneapi.com/v1/voices", headers={"x-sup-api-key": supertone_key})
                 if resp.status_code == 200:
-                    voices = resp.json()
-                    st.session_state.supertone_voices = voices if isinstance(voices, list) else voices.get("voices", [])
-                    st.success(f"✅ {len(st.session_state.supertone_voices)}개 목소리 로드됨!")
+                    data = resp.json()
+                    voices = data.get("items", data) if isinstance(data, dict) else data
+                    # 커스텀 목소리도 불러오기
+                    resp2 = _req.get("https://supertoneapi.com/v1/custom-voices", headers={"x-sup-api-key": supertone_key})
+                    if resp2.status_code == 200:
+                        data2 = resp2.json()
+                        custom = data2.get("items", []) if isinstance(data2, dict) else []
+                        voices = voices + custom
+                    st.session_state.supertone_voices = voices
+                    st.success(f"✅ {len(voices)}개 목소리 로드됨!")
                 else:
-                    st.error(f"오류: {resp.status_code}")
+                    st.error(f"오류: {resp.status_code} — {resp.text}")
             except Exception as e:
                 st.error(f"오류: {e}")
     
     if st.session_state.supertone_voices:
-        voice_options = {f"{v.get('name','Unknown')} ({v.get('language','')})": v.get('voice_id') or v.get('id') for v in st.session_state.supertone_voices}
+        voice_options = {f"{v.get('name','Unknown')} ({v.get('gender','')}/{v.get('age','')})": v.get('voice_id') or v.get('id','') for v in st.session_state.supertone_voices if v.get('voice_id') or v.get('id')}
         selected_voice_name = st.selectbox("목소리 선택", list(voice_options.keys()), label_visibility="collapsed", key="voice_select")
         st.session_state.supertone_voice_id = voice_options[selected_voice_name]
         
