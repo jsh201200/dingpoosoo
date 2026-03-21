@@ -374,44 +374,36 @@ def build_prompt(client, cut, style_prefix, character_b64, language, idx, total)
     ]
     comp_hint = comp_hints[(idx - 1) % len(comp_hints)]
 
-    sys = f"""You are a visual scene designer for Korean YouTube content. Your job: translate Korean scripts into images so clear that a viewer understands the ENTIRE situation WITHOUT reading a single word.
+    sys = f"""You are a LITERAL SCENE DIRECTOR for Korean YouTube content. Your job: read the Korean script and describe EXACTLY what is happening as a specific, concrete, photographable scene.
 
-CORE MISSION: 100% VISUAL STORYTELLING
-Every image must be SELF-EXPLANATORY. A child should look at it and instantly understand:
-- What situation is happening
-- What emotion/tone it carries
-- What the key message is
-Use SYMBOLIC OBJECTS, ENVIRONMENTAL STORYTELLING, and VISUAL METAPHORS to communicate everything.
+GOLDEN RULE: Be LITERAL and SPECIFIC, not abstract or metaphorical.
+- Script says "camping checkout at 11am" → character frantically packing camping gear at car trunk, sign behind reads "체크아웃 오전 11시", clock showing time
+- Script says "selling camping gear second-hand" → character holding phone showing 당근마켓 app with camping items listed, tent visible in background
+- Script says "gas price went up" → character at gas station, shocked expression, price board showing ₩2800, arrow pointing up
+- Script says "bankruptcy" → character standing in empty concrete room, document on floor with "파산" stamp in red
 
-TONE: Calm, documentary-style. NOT catastrophic, NOT chaotic.
-- Show the MOMENT AFTER: empty gym (not burning), tilted building (not exploding), closed shops (not rioting)
-- Subtle > Dramatic. Stillness > Action. Implication > Literal
+SCENE CONSTRUCTION METHOD:
+1. WHO is doing WHAT action specifically? (not "standing" but "frantically stuffing sleeping bag into car trunk")
+2. WHERE exactly? (not "outdoors" but "campsite parking lot at dawn, mist in air")
+3. WHAT specific objects are visible? (list 4-5 real props)
+4. WHAT Korean text appears naturally? (on signs, screens, documents, receipts — make it relevant)
+5. WHAT is the character's exact body posture/expression?
 
-YOUTUBE CONTENT SAFETY — SMART VISUAL SOLUTIONS:
-When scripts mention sensitive topics, use CLEVER VISUAL METAPHORS instead of literal depiction:
-- Violence/conflict → shadows, broken objects, caution tape, empty chairs
-- Death/tragedy → wilting flowers, empty shoes, extinguished candles, memorial items  
-- Financial ruin → empty wallet on ground, foreclosure notice on door, lightbulb flickering off
-- Controversy/scandal → newspaper with pixelated face, question marks, closed doors
-- Addiction/danger → cracks in wall, fraying rope, warning signs
-- Poverty → worn shoes, empty refrigerator, hands counting last coins
-Never show: blood, explicit violence, realistic weapons, identifiable real people in negative contexts.
+CHARACTER ROLE:
+- Character is IN the scene, doing something specific related to the script
+- Size: medium (30-40% of frame) — visible but not overwhelming
+- Always doing a specific action: holding something, pointing, reacting, interacting with objects
+- Expression matches the script emotion perfectly
 
-VISUAL CLARITY CHECKLIST:
-1. What is the SINGLE main message? → Make ONE dominant visual element scream it
-2. What SUPPORTING details reinforce it? → 3-5 specific props/details
-3. What EMOTION should viewer feel? → Lighting + color + atmosphere
-4. What TEXT CLUES exist? → Signs, headlines, labels (in Korean if language=Korean)
-5. Is it instantly readable? → If you need 10 seconds to understand, simplify
-
-IF CHARACTER PROVIDED:
-- Small in frame (max 25%), reacting naturally to environment
-- Their BODY LANGUAGE communicates emotion — no need to see face clearly
-- Character + environment together = complete story
+YOUTUBE SAFETY — SHOW DON'T SHOCK:
+- Weapons → show as shadows, outlines, or distant/toy versions
+- Violence → aftermath only: broken objects, empty spaces, caution tape
+- Death/loss → empty chair, wilting flower, turned-off lights
+- Never: blood, realistic weapons, identifiable real people negatively
 
 COMPOSITION: {comp_hint}
 
-Describe the scene in 80-100 words, English only. Be SPECIFIC about every visual element."""
+Write 80-100 words in English. Describe the EXACT scene like a film director giving instructions to a set designer. Be specific about every prop, sign text, character action, and lighting."""
 
     r = client.models.generate_content(
         model="gemini-2.5-flash",
