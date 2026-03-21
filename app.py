@@ -210,7 +210,8 @@ for k, v in [("cuts",[]),("sections",[]),("styles",[]),("prompts",[]),
              ("regen_idx",None),("last_intro",""),("last_body",""),
              ("last_intro_sec",4),("last_body_sec",20),("last_tts",1.2),
              ("auto_zip_ready",False),("auto_zip_data",None),("auto_zip_name",""),
-             ("supertone_voices",[]),("supertone_voice_id","")]:
+             ("supertone_voices",[]),("supertone_voice_id",""),
+             ("tts_bytes",None),("tts_duration",0),("tts_cuts_durations",[])]:
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -958,12 +959,8 @@ if gen_btn:
         st.markdown("### 🎙️ 슈퍼톤 TTS 자동 생성 중...")
         try:
             import requests as _req
-            import os as _os
             from pydub import AudioSegment as _AS
             import tempfile as _tmp2
-
-            tts_dir = _os.path.join(_os.path.expanduser("~"), "Downloads", "딩푸수_TTS")
-            _os.makedirs(tts_dir, exist_ok=True)
 
             tts_prog = st.progress(0, text="🎙️ TTS 생성 중...")
             tts_segments = []
@@ -1007,11 +1004,15 @@ if gen_btn:
             for seg in tts_segments[1:]:
                 full_audio += seg
 
-            tts_path = _os.path.join(tts_dir, f"voice_full.wav")
-            full_audio.export(tts_path, format="wav")
-            st.success(f"✅ 음성 생성 완료! {len(full_audio)/1000:.1f}초 → {tts_path}")
-            st.session_state["tts_full_path"] = tts_path
+            # 메모리에 저장 후 바로 다운로드 버튼 제공
+            tts_buf = io.BytesIO()
+            full_audio.export(tts_buf, format="mp3", bitrate="192k")
+            tts_bytes = tts_buf.getvalue()
+            tts_duration = len(full_audio)/1000
+            st.session_state["tts_bytes"] = tts_bytes
+            st.session_state["tts_duration"] = tts_duration
             st.session_state["tts_cuts_durations"] = [len(seg)/1000 for seg in tts_segments]
+            st.success(f"✅ 음성 생성 완료! {tts_duration:.1f}초")
         except Exception as e:
             st.error(f"TTS 오류: {e}")
 
@@ -1060,20 +1061,39 @@ if st.session_state.regen_idx is not None and api_key:
 # ══════════════════════════════════════════════════════════════
 if st.session_state.get("auto_zip_ready") and st.session_state.get("auto_zip_data"):
     st.balloons()
-    st.success("🎉 이미지 생성 완료! ZIP 파일을 바로 받으세요!")
-    st.download_button(
-        "📦 ⬇️ ZIP 지금 바로 다운로드 (이미지 + 대본 목록)",
-        data=st.session_state["auto_zip_data"],
-        file_name=st.session_state["auto_zip_name"],
-        mime="application/zip",
-        type="primary",
-        use_container_width=True,
-        key="auto_zip_dl"
-    )
+    st.success("🎉 생성 완료! 아래에서 파일을 받으세요!")
+
+    dl_col1, dl_col2 = st.columns(2)
+    with dl_col1:
+        st.download_button(
+            "📦 ⬇️ 이미지 ZIP 다운로드",
+            data=st.session_state["auto_zip_data"],
+            file_name=st.session_state["auto_zip_name"],
+            mime="application/zip",
+            type="primary",
+            use_container_width=True,
+            key="auto_zip_dl"
+        )
+    with dl_col2:
+        if st.session_state.get("tts_bytes"):
+            _tts_title = st.session_state.get("auto_zip_name", "딩푸수").replace(".zip", "")
+            st.download_button(
+                "🎙️ ⬇️ 음성 MP3 다운로드",
+                data=st.session_state["tts_bytes"],
+                file_name=f"{_tts_title}_voice.mp3",
+                mime="audio/mpeg",
+                type="primary",
+                use_container_width=True,
+                key="tts_dl"
+            )
+        else:
+            st.info("음성 없음 (슈퍼톤 API 키 입력시 자동 생성)")
+
     st.caption("⚠️ 새로고침하면 사라져요 — 지금 바로 받으세요!")
     if st.button("✅ 받았어요", key="zip_confirm", use_container_width=False):
         st.session_state["auto_zip_ready"] = False
         st.session_state["auto_zip_data"]  = None
+        st.session_state["tts_bytes"]      = None
         st.rerun()
     st.markdown("---")
 
