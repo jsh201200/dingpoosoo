@@ -374,44 +374,48 @@ def build_prompt(client, cut, style_prefix, character_b64, language, idx, total)
     ]
     comp_hint = comp_hints[(idx - 1) % len(comp_hints)]
 
-    sys = f"""You are a LITERAL SCENE DIRECTOR for Korean YouTube content. Your job: read the Korean script and describe EXACTLY what is happening as a specific, concrete, photographable scene.
+    sys = f"""You are a SCENE DIRECTOR for Korean YouTube content. Translate the Korean script into ONE clean, cinematic, instantly-readable scene.
 
-GOLDEN RULE: Be LITERAL and SPECIFIC, not abstract or metaphorical.
-- Script says "camping checkout at 11am" → character frantically packing camping gear at car trunk, sign behind reads "체크아웃 오전 11시", clock showing time
-- Script says "selling camping gear second-hand" → character holding phone showing 당근마켓 app with camping items listed, tent visible in background
-- Script says "gas price went up" → character at gas station, shocked expression, price board showing ₩2800, arrow pointing up
-- Script says "bankruptcy" → character standing in empty concrete room, document on floor with "파산" stamp in red
+CORE APPROACH: Specific situation + Clean composition + Cinematic quality
+Think: "What is ONE perfect shot that captures this script's essence?"
 
-SCENE CONSTRUCTION METHOD:
-1. WHO is doing WHAT action specifically? (not "standing" but "frantically stuffing sleeping bag into car trunk")
-2. WHERE exactly? (not "outdoors" but "campsite parking lot at dawn, mist in air")
-3. WHAT specific objects are visible? (list 4-5 real props)
-4. WHAT Korean text appears naturally? (on signs, screens, documents, receipts — make it relevant)
-5. WHAT is the character's exact body posture/expression?
+SCENE RULES:
+1. ONE dominant focal point — character doing ONE clear action, or ONE key environment
+2. MAX 2-3 props in foreground — don't clutter. Less is more.
+3. Background: detailed but slightly soft/bokeh — supports story without competing
+4. ONE piece of Korean text naturally placed (sign, screen, document) that reinforces message
+5. Lighting sets the mood: warm/cool/dramatic — match the script emotion
 
-CHARACTER ROLE:
-- Character is IN the scene, doing something specific related to the script
-- Size: medium (30-40% of frame) — visible but not overwhelming
-- Always doing a specific action: holding something, pointing, reacting, interacting with objects
-- Expression matches the script emotion perfectly
+GOOD EXAMPLES:
+- "camping gear sold second-hand" → character from behind holding phone (showing 중고거래 app screen), tent softly blurred behind
+- "gas price shock" → character at gas station staring at price board (showing ₩2800↑), expression of disbelief, clean station background
+- "bankruptcy" → character small in vast empty marble room, single crumpled document with "파산" stamp on clean floor
 
-YOUTUBE SAFETY — SHOW DON'T SHOCK:
-- Weapons → show as shadows, outlines, or distant/toy versions
-- Violence → aftermath only: broken objects, empty spaces, caution tape
-- Death/loss → empty chair, wilting flower, turned-off lights
-- Never: blood, realistic weapons, identifiable real people negatively
+BAD (avoid):
+- Too many objects competing for attention
+- Busy/cluttered scenes
+- Character doing multiple things at once
+
+CHARACTER:
+- Doing ONE specific, expressive action related to the script
+- 30-40% of frame
+- Clear emotion visible in posture and expression
+
+YOUTUBE SAFETY:
+- Sensitive topics → clever visual metaphor (shadow, outline, aftermath)
+- Never: blood, realistic weapons, identifiable people negatively
 
 COMPOSITION: {comp_hint}
 
-Write 80-100 words in English. Describe the EXACT scene like a film director giving instructions to a set designer. Be specific about every prop, sign text, character action, and lighting."""
+Write 80-100 words in English. ONE clean cinematic shot. Specific but uncluttered."""
 
     r = client.models.generate_content(
         model="gemini-2.5-flash",
-        contents=f'Script segment {idx}/{total}:\n"{cut}"\n\nDescribe the scene:',
+        contents=f'Script segment {idx}/{total}:\n"{cut}"\n\nNow describe this scene in full detail:',
         config=types.GenerateContentConfig(
             system_instruction=sys,
             temperature=0.7,
-            max_output_tokens=200,
+            max_output_tokens=600,
         )
     )
     scene = r.text.strip().strip('"').strip("'")
