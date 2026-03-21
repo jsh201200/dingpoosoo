@@ -374,40 +374,38 @@ def build_prompt(client, cut, style_prefix, character_b64, language, idx, total)
     ]
     comp_hint = comp_hints[(idx - 1) % len(comp_hints)]
 
-    sys = f"""You are a SCENE DIRECTOR for Korean YouTube content. Translate the Korean script into ONE clean, cinematic, instantly-readable scene.
+    sys = f"""You are a VISUAL TRANSLATOR for Korean YouTube content. Your only job: READ the Korean script carefully and describe EXACTLY what it says as a visual scene.
 
-CORE APPROACH: Specific situation + Clean composition + Cinematic quality
-Think: "What is ONE perfect shot that captures this script's essence?"
+STEP 1 — EXTRACT: What does the script LITERALLY say is happening?
+- People, places, objects, actions mentioned in the text
+- Do NOT invent metaphors. Do NOT substitute with mood/atmosphere.
+- If script says "missiles fired into sea" → show missiles and sea. Not a living room. Not a person looking sad.
 
-SCENE RULES:
-1. ONE dominant focal point — character doing ONE clear action, or ONE key environment
-2. MAX 2-3 props in foreground — don't clutter. Less is more.
-3. Background: detailed but slightly soft/bokeh — supports story without competing
-4. ONE piece of Korean text naturally placed (sign, screen, document) that reinforces message
-5. Lighting sets the mood: warm/cool/dramatic — match the script emotion
+STEP 2 — VISUALIZE: Turn the literal content into a specific cinematic shot:
+- WHERE is this happening? (exact location from script)
+- WHAT is the main visual action? (what the script describes)
+- WHO or WHAT is the subject? (from script, not invented)
+- WHAT Korean text reinforces this? (1-2 words on signs/screens)
 
-GOOD EXAMPLES:
-- "camping gear sold second-hand" → character from behind holding phone (showing 중고거래 app screen), tent softly blurred behind
-- "gas price shock" → character at gas station staring at price board (showing ₩2800↑), expression of disbelief, clean station background
-- "bankruptcy" → character small in vast empty marble room, single crumpled document with "파산" stamp on clean floor
+EXAMPLES OF CORRECT TRANSLATION:
+- "김정은이 미사일 10발을 동해에 쏘았다" → missiles arcing over dark sea at night, North Korean launch site visible on distant shore, smoke trails in sky, waves below
+- "헬스장이 폐업했다" → closed gym, locked glass doors with '폐업' sign, dusty equipment visible inside, empty parking lot
+- "기름값이 올랐다" → gas station price board showing high numbers with upward arrow, character staring at it in shock
+- "전쟁 나는 거 아냐?" → person at night watching news on laptop, screen glow on worried face, '긴급' text visible on screen
 
-BAD (avoid):
-- Too many objects competing for attention
-- Busy/cluttered scenes
-- Character doing multiple things at once
+YOUTUBE SAFETY (only for truly sensitive content):
+- Graphic violence → show aftermath/implication, not gore
+- Real identifiable people → show from behind or as silhouette only
+- Otherwise: show what the script ACTUALLY says
 
-CHARACTER:
-- Doing ONE specific, expressive action related to the script
-- 30-40% of frame
-- Clear emotion visible in posture and expression
-
-YOUTUBE SAFETY:
-- Sensitive topics → clever visual metaphor (shadow, outline, aftermath)
-- Never: blood, realistic weapons, identifiable people negatively
+CHARACTER (if provided):
+- Place them naturally IN the scene described by script
+- 30-40% of frame, doing something relevant
+- Their reaction matches what the script describes
 
 COMPOSITION: {comp_hint}
 
-Write 80-100 words in English. ONE clean cinematic shot. Specific but uncluttered."""
+Write 80-100 words in English. Translate the script LITERALLY into a visual scene. Stay true to what the script says."""
 
     r = client.models.generate_content(
         model="gemini-2.5-flash",
