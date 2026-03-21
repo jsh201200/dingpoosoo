@@ -120,112 +120,88 @@ st.markdown("""
 # ── 스타일 프리셋 ──────────────────────────────────────────────
 STYLE_PRESETS = {
     "🐿️ Pixar/Disney 3D": (
-        "Pixar and Disney CGI animation style, high-quality 3D render. "
-        "When character reference is provided: render that character with large soulful eyes, soft detailed fur, "
-        "fluid proportions, richly detailed outfit matching scene context. "
-        "When NO character reference: use an expressive anthropomorphic animal character "
-        "OR a stylized Pixar-style human character — whichever fits the scene better. "
-        "Cinematic depth of field, vibrant saturated colors, warm rim lighting, volumetric light rays. "
-        "Background is a fully realized stylized 3D environment matching the scene content exactly. "
-        "Foreground, midground, background depth layers. "
-        "Any text sharply rendered, legible, correctly spelled. "
-        "Polished, warm, emotionally engaging — Pixar feature film quality."
+        "Art style: Pixar and Disney CGI animation — high-quality 3D render, "
+        "large soulful eyes, soft detailed fur/skin, fluid proportions, "
+        "vibrant saturated colors, warm rim lighting, volumetric light rays, "
+        "polished warm emotionally engaging Pixar feature film quality."
     ),
     "📰 뉴스/시사 다큐": (
-        "Editorial illustration in hand-drawn ink-and-wash style of Quentin Blake, news urgency aesthetic. "
-        "Loose expressive scribbled ink line work — thick where dramatic, thin where delicate. "
-        "High-contrast: stark white areas against deep charcoal black shadows. "
-        "Minimal transparent watercolor wash — washed deep crimson red, cold navy blue, urgent ochre yellow. "
-        "Any text (속보, 긴급, headlines, labels) as bold hand-lettered stenciled text on banners or torn paper. "
-        "Characters show exaggerated emotion through body language. "
-        "Raw, unfinished, powerful — breaking news illustration drawn under deadline pressure. "
-        "Background environment must match the script topic exactly — NOT a news desk unless script is literally about news."
+        "Art style: editorial hand-drawn ink-and-wash illustration, Quentin Blake aesthetic. "
+        "Loose expressive scribbled ink lines — thick where dramatic, thin where delicate. "
+        "High-contrast: stark white against deep charcoal shadows. "
+        "Minimal watercolor wash — deep crimson, cold navy, urgent ochre. "
+        "Raw, unfinished, powerful — breaking news drawn under deadline pressure."
     ),
     "😊 실사 다큐 포토": (
-        "National Geographic photojournalism aesthetic, cinematic documentary photography. "
-        "When character reference is provided: render that character with extreme photorealistic fur/skin detail. "
-        "When NO character reference: focus on environment and situation — "
-        "use silhouetted anonymous human figures (no identifiable face), hands, symbolic objects, "
-        "or pure environmental storytelling. NO random animals unless script mentions animals. "
+        "Art style: National Geographic photojournalism, cinematic documentary photography. "
         "Shallow depth of field — subject razor sharp, background bokeh. "
-        "Volumetric natural lighting matching scene mood: golden-hour / cold fluorescence / dramatic spotlight. "
-        "Background is a fully detailed real-world environment matching script content exactly. "
-        "Shot on Canon EOS R5, 85mm f/1.4, 8K. Cinematic LUT color grade. World Press Photo award quality."
+        "Volumetric natural lighting. Shot on Canon EOS R5, 85mm f/1.4, 8K. "
+        "Cinematic LUT color grade. World Press Photo award quality."
     ),
     "🎨 퀜틴 블레이크 수채화": (
-        "Quentin Blake hand-drawn illustration — loose, joyful, humanistic. "
-        "Scribbled expressive black ink lines with deliberate imperfection and energy. "
-        "Layered transparent watercolor washes: warm blues, pale greens, golden ochre, dusty rose, soft reds. "
-        "Pure white background preserved in key areas for luminosity. "
-        "Characters with elastic exaggerated proportions — rubbery limbs, tilted heads, enormous expressive eyes. "
-        "Background loosely suggested with gestural strokes establishing location. "
-        "Any text as hand-lettered script organically woven into illustration. "
-        "Background setting must reflect scene content — could be outdoors, indoors, abstract, anywhere."
+        "Art style: Quentin Blake hand-drawn illustration — loose, joyful, humanistic. "
+        "Scribbled expressive black ink lines with deliberate imperfection. "
+        "Layered transparent watercolor washes: warm blues, pale greens, golden ochre, dusty rose. "
+        "Pure white background preserved for luminosity. Elastic exaggerated character proportions."
     ),
     "🎭 흑백 드라마 잉크": (
-        "Stark black-and-white ink illustration — political cartoon meets graphic novel. "
-        "Bold deliberate brush strokes: razor-thin detail lines, thick slashing impact strokes. "
+        "Art style: stark black-and-white ink illustration — political cartoon meets graphic novel. "
+        "Bold brush strokes, razor-thin detail lines, thick slashing impact strokes. "
         "Chiaroscuro: deep black shadow pools, sharp white highlights, zero mid-tones. "
-        "Strong diagonals, extreme angles, silhouettes against harsh white. "
-        "Characters anatomically exaggerated for emotional effect. "
-        "Background as bold graphic shapes matching scene environment. "
-        "Any text as bold high-contrast block lettering. Zero color. Only black ink on white."
+        "Strong diagonals, extreme angles. Zero color — only black ink on white."
     ),
     "✏️ 모던 인포그래픽": (
-        "Clean sophisticated modern editorial illustration — information design meets fine art. "
-        "Precise consistent 1pt outlines, purely geometric. "
-        "Flat color fills: 4-5 color palette maximum, one neutral, two accents, one dark anchor. "
-        "Data visualization elements (charts, graphs, maps, timelines) as crisp graphic elements. "
-        "Any text typographically clean, correctly spelled, sized as core compositional element. "
-        "Background environment simplified into graphic shapes matching scene content. "
-        "Prestigious Korean economics magazine cover aesthetic."
+        "Art style: clean sophisticated modern editorial illustration — flat design meets fine art. "
+        "Precise 1pt outlines, purely geometric shapes. "
+        "Flat color fills: 4-5 color palette maximum. "
+        "Typographically clean text. Korean economics magazine cover aesthetic."
     ),
     "📊 경제학 유튜브": (
-        "Korean economics/documentary YouTube illustration style. "
-        "Bold, high-energy visual storytelling with dramatic color contrasts. "
-        "Color palette: freely chosen to best match the specific scene's content and emotion. "
-        "When the script involves economics/geopolitics: integrate world maps, trade arrows, charts, "
-        "currency symbols, flag icons, statistics naturally into the background if relevant. "
-        "When the script involves other topics: use fitting environments in the same bold energetic style. "
-        "Characters expressive and dynamic, mid-action. "
-        "Korean text labels only when adding clear informational value. "
-        "Overall energy: MBC documentary meets Kurzgesagt — urgent, informative, visually exciting."
+        "Art style: Korean documentary YouTube illustration — bold high-energy visual storytelling. "
+        "High contrast colors, dynamic composition, expressive lines. "
+        "Energy: MBC documentary meets Kurzgesagt — urgent, vivid, informative visual style."
     ),
     "🖌️ 커스텀": "",
 }
 
 # 캐릭터 없을 때 fallback 지시
 STICKMAN_FALLBACK = (
-    "No specific character reference provided. "
-    "Represent the human element using ONE of these approaches (choose what fits the scene best): "
-    "1. SILHOUETTE — dark human outline against dramatic backlit background, no facial features visible. "
-    "2. BACK VIEW — person seen from behind, facing toward the scene, viewer follows their gaze. "
-    "3. SIDE PROFILE — partial face visible, no identifiable features, focus on expression/posture. "
-    "4. HANDS/BODY ONLY — close-up on hands interacting with objects, or body from neck down. "
-    "5. ANONYMOUS CROWD — multiple figures without individual facial detail. "
-    "6. STICKMAN — simple 2D stick figure with expressive pose if the style suits it. "
-    "Choose whichever creates the most cinematic and emotionally resonant image for this scene. "
-    "Never generate an identifiable or realistic human face. "
+    "No character reference provided. ENVIRONMENT and OBJECTS are the main subject. "
+    "If human presence is needed, use ONLY: small silhouette in distance, hands interacting with objects, "
+    "or back-view person looking at the scene. Never show face. Never make human the focal point. "
+    "The scene should feel like a quiet documentary photo — realistic, calm, not dramatic. "
 )
 
 # 모든 스타일에 공통 적용되는 품질 기본 지시
 # (스타일 프롬프트 뒤에 항상 자동 추가됨)
 BASE_QUALITY = (
-    "HIGH DETAIL: richly detailed background environment that matches the script content exactly — "
-    "NOT a generic office or news desk unless the script is literally about that. "
-    "The background tells the story as much as the character. "
-    "Expressive character with clear emotion visible in face and body posture. "
-    "Dynamic lighting that matches the scene mood. "
-    "Foreground, midground, and background layers for depth. "
-    "Cinematic quality, highly detailed, masterpiece level rendering."
+    "BACKGROUND IS EVERYTHING — make it SPECIFIC, RICH, and VARIED every single scene. "
+    "Never repeat similar backgrounds. Each scene = a completely different, unique location. "
+    "SPECIFIC over generic: NOT 'gym' but 'dimly lit gym with chalk-dusted barbells, cracked mirrors, rubber mat smell implied visually'. "
+    "NOT 'office' but 'cluttered desk with sticky notes, monitor glow casting blue light, rain-streaked window showing city below'. "
+    "NOT 'street' but 'narrow alley market, hanging red lanterns, steam from food stalls, wet cobblestones reflecting neon'. "
+    "DEPTH LAYERS: Strong foreground texture (objects, plants, furniture), busy midground (people/activity/architecture), "
+    "atmospheric background (sky, distant buildings, nature) — every layer filled with detail. "
+    "LIGHTING: Ultra-specific — golden hour warmth, harsh fluorescent buzz, moody neon glow, overcast diffused grey, "
+    "dramatic spotlight, candlelight flicker — lighting MATCHES the script emotion precisely. "
+    "ATMOSPHERE: Time of day, weather, season all VISIBLE — morning fog, evening shadow, summer heat haze, winter frost. "
+    "If character present: small in frame (max 25%), reacting naturally to environment, never posed stiffly. "
+    "Cinematic masterpiece quality. Zero generic backgrounds. Every corner tells the story."
 )
 
 
 LANGUAGE_SETTINGS = {
     "언어 없음": "NO text, letters, words, or numbers anywhere in the image.",
-    "한국어": "MINIMAL Korean text only — maximum 1~2 short words on signs or key visual elements if absolutely essential to the scene. Default to NO text unless critical.",
-    "일본어": "MINIMAL Japanese text only — maximum 1~2 short words if absolutely essential. Default to NO text.",
-    "영어": "MINIMAL English text only — maximum 1~2 short words if absolutely essential. Default to NO text.",
+    "한국어": (
+        "KOREAN TEXT: Include 1~3 SHORT Korean keywords naturally embedded in the scene — "
+        "on signs, banners, newspapers, screens, storefronts, or packaging. "
+        "Examples: shop sign says '폐업', newspaper headline says '위기', building banner says '분양', "
+        "screen shows '하락', poster says '할인'. "
+        "Text must feel ORGANIC to the environment — not floating labels. "
+        "Choose words that reinforce the script's core message. Max 2-3 characters per text element."
+    ),
+    "일본어": "MINIMAL Japanese text only — 1~2 short words on signs or props if natural. Default to NO text.",
+    "영어": "MINIMAL English text only — 1~2 short words on signs or props if natural. Default to NO text.",
 }
 
 # ── 세션 초기화 ────────────────────────────────────────────────
@@ -361,49 +337,80 @@ def build_prompt(client, cut, style_prefix, character_b64, language, idx, total)
     """대본 내용 최우선 → 배경/구도/감정 자동 결정"""
     lang = LANGUAGE_SETTINGS[language]
 
-    # 캐릭터 있으면: 스타일 프롬프트가 뭐든 이 캐릭터가 주인공
+    # 캐릭터 있으면: 배경 속 내레이터/가이드 역할
     char_note = (
-        "CRITICAL: The main character MUST be the exact same character as in the reference image. "
-        "Preserve species, face shape, body proportions, fur/skin color and texture EXACTLY. "
-        "ONLY change: expression (match scene emotion), outfit (match scene context), pose/action. "
-        "This applies regardless of the art style — same character, different style rendering. "
+        "CHARACTER ROLE: This character is a NARRATOR/GUIDE within the scene — NOT the main subject. "
+        "CRITICAL: Preserve species, face, body proportions, fur/skin color EXACTLY from reference. "
+        "PLACEMENT: Character should occupy MAX 25-30% of frame. Show from behind, side profile, or small against background. "
+        "Character is REACTING to the environment naturally — not posing for the camera. "
+        "The environment and situation behind/around the character is the TRUE subject of the image. "
+        "ONLY change: expression (subtle), outfit (match context), pose (natural reaction). "
     ) if character_b64 else STICKMAN_FALLBACK
 
     comp_hints = [
-        "Consider an extreme close-up if emotion is intense.",
-        "Consider a wide shot to show the environment's scale.",
-        "Consider a low angle to make the subject feel powerful.",
-        "Consider an over-the-shoulder shot for a point-of-view feel.",
-        "Consider a bird's eye view for an overview feel.",
-        "Consider a dutch angle for tension or unease.",
-        "Consider silhouetting the character against a dramatic backdrop.",
-        "Consider showing hands or a key object in the foreground.",
-        "Consider placing the character small against a vast background.",
-        "Consider a side profile shot showing movement or direction.",
-        "Consider a worm's eye view looking up dramatically.",
-        "Consider a two-thirds composition with environment telling the story.",
+        # 카메라 앵글
+        "Wide establishing shot — character tiny in corner, vast environment dominates.",
+        "Low angle looking up — character stands confidently, sky or ceiling fills 70% of frame.",
+        "Bird's eye view — character seen from above, surrounded by objects/environment.",
+        "Dutch angle — slightly tilted frame, creates unease or tension naturally.",
+        "Over-the-shoulder — viewer follows character's gaze into the scene.",
+        # 행동/자세
+        "Character mid-stride, walking purposefully through the environment.",
+        "Character crouching or kneeling, examining something on the ground.",
+        "Character leaning against a wall or structure, arms crossed, contemplating.",
+        "Character reaching out or pointing at something in the environment.",
+        "Character sitting down, looking out — thoughtful, observational pose.",
+        "Character turning around mid-action, caught in a dynamic moment.",
+        "Character standing with back to viewer, facing the vast scene ahead.",
+        "Character running or rushing through the environment, motion blur implied.",
+        "Character looking up at something towering above them.",
+        "Character holding or interacting with a key object — hands in focus.",
+        "Character partially hidden — peeking around corner, behind object.",
+        "Character in mid-jump or dynamic leap, energy and movement.",
+        "Character arms spread wide — embracing, presenting, or reacting to environment.",
+        "Character hunched over, shoulders low — exhausted or deep in thought.",
+        "Character looking directly at something off-frame — curiosity or tension.",
     ]
     comp_hint = comp_hints[(idx - 1) % len(comp_hints)]
 
-    sys = f"""You are a visual interpreter — your job is to READ the Korean script deeply and translate its TRUE MEANING into a vivid visual scene.
+    sys = f"""You are a visual scene designer for Korean YouTube content. Your job: translate Korean scripts into images so clear that a viewer understands the ENTIRE situation WITHOUT reading a single word.
 
-MOST IMPORTANT: Don't just describe what the words say literally. Capture what they MEAN and FEEL.
+CORE MISSION: 100% VISUAL STORYTELLING
+Every image must be SELF-EXPLANATORY. A child should look at it and instantly understand:
+- What situation is happening
+- What emotion/tone it carries
+- What the key message is
+Use SYMBOLIC OBJECTS, ENVIRONMENTAL STORYTELLING, and VISUAL METAPHORS to communicate everything.
 
-HOW TO INTERPRET:
-- Metaphors → visualize them literally: "뚱냥이처럼 늘어진 몸" = a fat lazy cat melting into a bed
-- Abstract concepts → make them physical: "의지력이 바닥났다" = an empty fuel gauge, a drained battery
-- Emotional states → show in body and environment: "뇌가 파업" = factory shutdown, workers sitting down, machines stopped
-- Comparisons → show both sides visually: "기름 없는 차" = car broken down, empty gauge, person pushing it
-- Irony/contrast → show the tension: "성공하고 싶은데 못 움직인다" = person with fire in eyes but body stuck in quicksand
+TONE: Calm, documentary-style. NOT catastrophic, NOT chaotic.
+- Show the MOMENT AFTER: empty gym (not burning), tilted building (not exploding), closed shops (not rioting)
+- Subtle > Dramatic. Stillness > Action. Implication > Literal
 
-PROCESS:
-1. What does this script REALLY mean? (not just the surface words)
-2. What single image would make someone instantly GET it without reading?
-3. What emotion hits you first when you read this?
-4. What's the most DIRECT visual metaphor for this idea?
+YOUTUBE CONTENT SAFETY — SMART VISUAL SOLUTIONS:
+When scripts mention sensitive topics, use CLEVER VISUAL METAPHORS instead of literal depiction:
+- Violence/conflict → shadows, broken objects, caution tape, empty chairs
+- Death/tragedy → wilting flowers, empty shoes, extinguished candles, memorial items  
+- Financial ruin → empty wallet on ground, foreclosure notice on door, lightbulb flickering off
+- Controversy/scandal → newspaper with pixelated face, question marks, closed doors
+- Addiction/danger → cracks in wall, fraying rope, warning signs
+- Poverty → worn shoes, empty refrigerator, hands counting last coins
+Never show: blood, explicit violence, realistic weapons, identifiable real people in negative contexts.
 
-Then describe that scene: who, doing what, where, in what light, with what emotion.
-Be SPECIFIC and VISUAL. 80-100 words, English only. No style words."""
+VISUAL CLARITY CHECKLIST:
+1. What is the SINGLE main message? → Make ONE dominant visual element scream it
+2. What SUPPORTING details reinforce it? → 3-5 specific props/details
+3. What EMOTION should viewer feel? → Lighting + color + atmosphere
+4. What TEXT CLUES exist? → Signs, headlines, labels (in Korean if language=Korean)
+5. Is it instantly readable? → If you need 10 seconds to understand, simplify
+
+IF CHARACTER PROVIDED:
+- Small in frame (max 25%), reacting naturally to environment
+- Their BODY LANGUAGE communicates emotion — no need to see face clearly
+- Character + environment together = complete story
+
+COMPOSITION: {comp_hint}
+
+Describe the scene in 80-100 words, English only. Be SPECIFIC about every visual element."""
 
     r = client.models.generate_content(
         model="gemini-2.5-flash",
@@ -1035,57 +1042,6 @@ if gen_btn:
     st.session_state["auto_zip_name"]  = f"{_safe_title}.zip"
     st.session_state["auto_zip_ready"] = True
 
-    # ── 슈퍼톤 TTS + 이미지 → 자동 영상 합성 ──────────────────────
-    if st.session_state.get("tts_full_path") and __import__("os").path.exists(st.session_state["tts_full_path"]):
-        st.markdown("### 🎬 영상 자동 합성 중...")
-        try:
-            from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips
-            import tempfile as _tmp, time as _time2
-
-            tts_path = st.session_state["tts_full_path"]
-            audio_clip = AudioFileClip(tts_path)
-            total_dur = audio_clip.duration
-
-            # 실제 TTS 구간 시간으로 배분 (있으면), 없으면 글자수 비율
-            if st.session_state.get("tts_cuts_durations") and len(st.session_state["tts_cuts_durations"]) == len(images_out):
-                clip_durations = st.session_state["tts_cuts_durations"]
-                st.success("✅ TTS 실제 시간 기준 싱크 적용!")
-            else:
-                total_chars = sum(len(c) for c in all_cuts)
-                clip_durations = [total_dur * (len(c) / total_chars) for c in all_cuts]
-
-            motion_list = _get_shuffled_motions(len(images_out))
-            clips = []
-            auto_prog = st.progress(0, text="클립 생성 중...")
-            for idx, img in enumerate(images_out):
-                if img is None:
-                    continue
-                dur = clip_durations[idx] if idx < len(clip_durations) else total_dur / len(images_out)
-                buf = io.BytesIO()
-                img.save(buf, format="PNG")
-                buf.seek(0)
-                with _tmp.NamedTemporaryFile(delete=False, suffix=".png") as tf:
-                    tf.write(buf.read())
-                    tp = tf.name
-                clip = ImageClip(tp, duration=dur).set_fps(30)
-                clip = _apply_motion(clip, motion_list[idx])
-                clips.append(clip)
-                auto_prog.progress((idx+1)/len(images_out), text=f"클립 생성 {idx+1}/{len(images_out)}")
-
-            import os as _os2
-            auto_out = _os2.path.join(_os2.path.expanduser("~"), "Downloads", f"딩푸수_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4")
-            est = int(total_dur * 0.8)
-            m, s = divmod(est, 60)
-            render_info = st.info(f"⚙️ 렌더링 중... (예상 {'%d분 %d초' % (m,s) if m else '%d초' % s} 소요)")
-            final_clip = concatenate_videoclips(clips, method="compose").set_audio(audio_clip)
-            final_clip.write_videofile(auto_out, fps=30, codec="libx264", audio_codec="aac", threads=4, logger=None)
-            render_info.success(f"✅ 렌더링 완료!")
-            st.balloons()
-            st.success(f"🎉🎉 완전 자동화 완성!! → {auto_out}")
-            st.session_state["tts_full_path"] = None
-        except Exception as e:
-            st.error(f"영상 합성 오류: {e}")
-
     st.rerun()
 
 # ══════════════════════════════════════════════════════════════
@@ -1216,414 +1172,6 @@ if st.session_state.step >= 1 and cuts:
                     st.rerun()
 
             st.markdown("---")
-
-# ══════════════════════════════════════════════════════════════
-# 🎬 영상 만들기
-# ══════════════════════════════════════════════════════════════
-st.markdown("---")
-st.markdown("## 🎬 영상 만들기")
-
-video_tab1, video_tab2, video_tab3 = st.tabs(["⚡ 로컬 자동생성", "📋 스크립트 방식", "📦 나중에 작업하기"])
-
-# ──────────────────────────────────────────────────────────────
-# TAB 1: 로컬 자동생성
-# ──────────────────────────────────────────────────────────────
-with video_tab1:
-    st.caption("로컬(내 컴퓨터)에서 실행할 때 사용해요. 음성 업로드 → 버튼 하나 → mp4 완성!")
-
-    # 무음 제거 설정
-    st.markdown("#### ✂️ 무음 제거 설정")
-    local_sil_col1, local_sil_col2 = st.columns(2)
-    with local_sil_col1:
-        local_audio_file = st.file_uploader("🔊 슈퍼톤 음성파일 업로드", type=["mp3","wav","m4a"], key="local_audio_file")
-    with local_sil_col2:
-        local_keep_silence = st.slider("무음 유지 길이 (ms)", 100, 500, 200, step=50, key="local_keep_silence")
-        st.caption(f"무음 구간을 {local_keep_silence}ms({local_keep_silence/1000}초)로 줄여요")
-
-    st.markdown("#### 🎥 영상 설정")
-    local_kb_style = st.selectbox("Ken Burns 효과", ["랜덤 (자동)", "줌인만", "줌아웃만", "좌→우 패닝", "우→좌 패닝", "없음"], key="local_kb_style")
-    import os as _os
-    local_output_path = _os.path.join(_os.path.expanduser("~"), "Downloads", f"딩푸수_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4")
-    st.info(f"💾 저장 위치: {local_output_path}")
-
-    n_imgs_local = len([img for img in st.session_state.get("images", []) if img])
-    if n_imgs_local > 0:
-        st.info(f"✅ 현재 세션 이미지 {n_imgs_local}개 준비됨")
-    else:
-        st.warning("⚠️ 먼저 이미지를 생성해주세요!")
-
-    if st.button("🎬 영상 자동 생성 시작", type="primary", use_container_width=True, key="local_gen_btn"):
-        if not local_audio_file:
-            st.error("음성파일을 업로드해주세요.")
-        elif n_imgs_local == 0:
-            st.error("먼저 이미지를 생성해주세요.")
-        else:
-            try:
-                from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips
-                from pydub import AudioSegment, silence as pydub_silence
-                import tempfile, random
-
-                kb_map = {"랜덤 (자동)": "random", "줌인만": "zoom_in", "줌아웃만": "zoom_out", "좌→우 패닝": "pan_left", "우→좌 패닝": "pan_right", "없음": "none"}
-                kb_mode = kb_map[local_kb_style]
-
-                with st.spinner("✂️ 무음 제거 중..."):
-                    audio_bytes = local_audio_file.read()
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_in:
-                        tmp_in.write(audio_bytes)
-                        tmp_in_path = tmp_in.name
-                    audio_seg = AudioSegment.from_file(tmp_in_path)
-                    orig_dur = len(audio_seg) / 1000
-                    chunks = pydub_silence.split_on_silence(audio_seg, min_silence_len=400, silence_thresh=-40, keep_silence=local_keep_silence)
-                    if not chunks:
-                        chunks = [audio_seg]
-                    trimmed = chunks[0]
-                    for c in chunks[1:]:
-                        trimmed += c
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_out:
-                        trimmed.export(tmp_out.name, format="mp3", bitrate="192k")
-                        tmp_audio_path = tmp_out.name
-                    trimmed_dur = len(trimmed) / 1000
-                    st.success(f"✅ 무음 제거 완료: {orig_dur:.1f}초 → {trimmed_dur:.1f}초 ({orig_dur-trimmed_dur:.1f}초 단축)")
-
-                with st.spinner("🎬 영상 생성 중... (잠깐 기다려요)"):
-                    images_list = st.session_state.get("images", [])
-                    valid_images = [(i, img) for i, img in enumerate(images_list) if img is not None]
-
-                    audio_clip = AudioFileClip(tmp_audio_path)
-                    total_dur = audio_clip.duration
-                    per_clip = total_dur / len(valid_images)
-
-                    def apply_kb(clip, mode):
-                        if mode == "none": return clip
-                        if mode == "random": mode = random.choice(["zoom_in", "zoom_out", "pan_left", "pan_right"])
-                        w, h = clip.size
-                        dur = clip.duration
-                        if mode == "zoom_in":
-                            return clip.resize(lambda t: 1.0 + 0.25 * (t / dur))
-                        elif mode == "zoom_out":
-                            return clip.resize(lambda t: 1.25 - 0.25 * (t / dur))
-                        elif mode == "pan_left":
-                            big = clip.resize(1.16)
-                            return big.set_position(lambda t: (-int(w*0.08*(t/dur)), 0)).set_duration(dur).crop(x1=0,y1=0,width=w,height=h)
-                        elif mode == "pan_right":
-                            big = clip.resize(1.16)
-                            return big.set_position(lambda t: (int(w*0.08*(t/dur)), 0)).set_duration(dur).crop(x1=0,y1=0,width=w,height=h)
-                        return clip
-
-                    clips = []
-                    prog = st.progress(0, text="클립 생성 중...")
-                    for idx, (i, img) in enumerate(valid_images):
-                        buf = io.BytesIO()
-                        img.save(buf, format="PNG")
-                        buf.seek(0)
-                        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_img:
-                            tmp_img.write(buf.read())
-                            tmp_img_path = tmp_img.name
-                        clip = ImageClip(tmp_img_path, duration=per_clip).set_fps(30)
-                        clip = apply_kb(clip, kb_mode)
-                        clips.append(clip)
-                        prog.progress((idx+1)/len(valid_images), text=f"클립 생성 중... {idx+1}/{len(valid_images)}")
-
-                    final = concatenate_videoclips(clips, method="compose")
-                    final = final.set_audio(audio_clip)
-                    final.write_videofile(local_output_path, fps=30, codec="libx264", audio_codec="aac", threads=4, logger=None)
-
-                st.balloons()
-                st.success(f"🎉 영상 완성! → {local_output_path}")
-
-            except ImportError as e:
-                st.error(f"패키지 오류: {e}")
-            except Exception as e:
-                st.error(f"오류 발생: {e}")
-
-# ──────────────────────────────────────────────────────────────
-# TAB 2: 스크립트 방식
-# ──────────────────────────────────────────────────────────────
-with video_tab2:
-    st.caption("스크립트를 받아서 로컬 cmd에서 실행하는 방식이에요. 경로는 자동으로 다운로드 폴더로 설정돼요!")
-
-    st.markdown("#### ✂️ 1단계: 무음 제거 스크립트")
-    st.info("📂 원본 음성파일을 다운로드 폴더에 넣어두면 자동으로 인식해요!")
-    sil_col1, sil_col2 = st.columns(2)
-    with sil_col1:
-        silence_input_filename = st.text_input("원본 음성파일명", placeholder="예: voice.mp3", key="silence_input_filename")
-        st.caption("다운로드 폴더 안의 파일명만 입력하세요")
-    with sil_col2:
-        silence_output_filename = st.text_input("출력 음성파일명", placeholder="예: voice_trimmed.mp3", key="silence_output_filename")
-        st.caption("비워두면 자동으로 원본명_trimmed.mp3로 저장")
-
-    if st.button("✂️ 무음 제거 스크립트 생성", use_container_width=True, key="gen_silence_script"):
-        if not silence_input_filename:
-            st.error("원본 음성파일명을 입력해주세요.")
-        else:
-            out_name = silence_output_filename.strip() if silence_output_filename.strip() else silence_input_filename.rsplit(".",1)[0] + "_trimmed.mp3"
-            silence_script = f'''#!/usr/bin/env python3
-import os
-from pydub import AudioSegment, silence
-DOWNLOADS = os.path.join(os.path.expanduser("~"), "Downloads")
-INPUT_FILE  = os.path.join(DOWNLOADS, r"{silence_input_filename}")
-OUTPUT_FILE = os.path.join(DOWNLOADS, r"{out_name}")
-KEEP_SILENCE_MS = 200
-MIN_SILENCE_MS  = 400
-SILENCE_THRESH  = -40
-print(f"📂 불러오는 중: {{INPUT_FILE}}")
-audio = AudioSegment.from_file(INPUT_FILE)
-orig = len(audio)/1000
-print(f"원본: {{orig:.1f}}초")
-chunks = silence.split_on_silence(audio, min_silence_len=MIN_SILENCE_MS, silence_thresh=SILENCE_THRESH, keep_silence=KEEP_SILENCE_MS)
-if not chunks: chunks = [audio]
-output = chunks[0]
-for c in chunks[1:]: output += c
-trimmed = len(output)/1000
-print(f"처리후: {{trimmed:.1f}}초 ({{orig-trimmed:.1f}}초 단축)")
-output.export(OUTPUT_FILE, format="mp3", bitrate="192k")
-print(f"✅ 완성! → {{OUTPUT_FILE}}")
-'''
-            st.success("✅ 생성 완료!")
-            st.download_button("⬇️ remove_silence.py 다운로드", silence_script.encode("utf-8"), "remove_silence.py", "text/x-python", use_container_width=True, key="dl_silence_script")
-            st.code("pip install pydub\npython remove_silence.py", language="bash")
-
-    st.markdown("---")
-    st.markdown("#### 🎬 2단계: 영상 합치기 스크립트")
-    st.info("📂 이미지 ZIP 압축 푼 폴더와 음성파일을 다운로드 폴더에 넣어두세요!")
-    vid_col1, vid_col2 = st.columns(2)
-    with vid_col1:
-        img_folder_name = st.text_input("📁 이미지 폴더명", placeholder="예: 딩푸수이미지", key="img_folder_name")
-        st.caption("다운로드 폴더 안의 폴더명만 입력하세요")
-    with vid_col2:
-        audio_file_name = st.text_input("🔊 음성파일명", placeholder="예: voice_trimmed.mp3", key="audio_file_name")
-        st.caption("다운로드 폴더 안의 파일명만 입력하세요")
-    ken_burns_style = st.selectbox("🎥 Ken Burns 효과", ["랜덤 (자동)", "줌인만", "줌아웃만", "좌→우 패닝", "우→좌 패닝", "없음"], key="ken_burns_style")
-
-    if st.button("🎬 영상 제작 스크립트 생성", type="primary", use_container_width=True, key="gen_video_script"):
-        if not img_folder_name or not audio_file_name:
-            st.error("이미지 폴더명과 음성파일명을 입력해주세요.")
-        else:
-            kb_map = {"랜덤 (자동)": "random", "줌인만": "zoom_in", "줌아웃만": "zoom_out", "좌→우 패닝": "pan_left", "우→좌 패닝": "pan_right", "없음": "none"}
-            kb_mode = kb_map[ken_burns_style]
-            script_code = f'''#!/usr/bin/env python3
-import os, glob, random
-from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips
-from datetime import datetime
-DOWNLOADS   = os.path.join(os.path.expanduser("~"), "Downloads")
-IMG_FOLDER  = os.path.join(DOWNLOADS, r"{img_folder_name}")
-AUDIO_FILE  = os.path.join(DOWNLOADS, r"{audio_file_name}")
-OUTPUT_FILE = os.path.join(DOWNLOADS, f"딩푸수_{{datetime.now().strftime('%Y%m%d_%H%M%S')}}.mp4")
-KB_MODE = "{kb_mode}"
-FPS = 30
-def apply_ken_burns(clip, mode):
-    if mode == "none": return clip
-    if mode == "random": mode = random.choice(["zoom_in","zoom_out","pan_left","pan_right"])
-    w, h = clip.size
-    dur = clip.duration
-    if mode == "zoom_in": return clip.resize(lambda t: 1.0+0.04*(t/dur))
-    elif mode == "zoom_out": return clip.resize(lambda t: 1.04-0.04*(t/dur))
-    elif mode == "pan_left":
-        big=clip.resize(1.16)
-        return big.set_position(lambda t:(-int(w*0.08*(t/dur)),0)).set_duration(dur).crop(x1=0,y1=0,width=w,height=h)
-    elif mode == "pan_right":
-        big=clip.resize(1.16)
-        return big.set_position(lambda t:(int(w*0.08*(t/dur)),0)).set_duration(dur).crop(x1=0,y1=0,width=w,height=h)
-    return clip
-imgs = sorted([f for ext in ["*.png","*.jpg"] for f in glob.glob(os.path.join(IMG_FOLDER,ext))])
-print(f"이미지 {{len(imgs)}}개 발견")
-audio = AudioFileClip(AUDIO_FILE)
-per_clip = audio.duration / len(imgs)
-print(f"음성 {{audio.duration:.1f}}초 → 이미지당 {{per_clip:.1f}}초")
-clips = []
-for i,p in enumerate(imgs):
-    clip = apply_ken_burns(ImageClip(p,duration=per_clip).set_fps(FPS), KB_MODE)
-    clips.append(clip)
-    print(f"  {{i+1}}/{{len(imgs)}} 처리중...")
-final = concatenate_videoclips(clips,method="compose").set_audio(audio)
-final.write_videofile(OUTPUT_FILE,fps=FPS,codec="libx264",audio_codec="aac",threads=4,logger="bar")
-print(f"✅ 완성! → {{OUTPUT_FILE}}")
-'''
-            st.success("✅ 생성 완료!")
-            st.download_button("⬇️ make_video.py 다운로드", script_code.encode("utf-8"), "make_video.py", "text/x-python", use_container_width=True)
-            st.code("pip install moviepy pillow\npython make_video.py", language="bash")
-
-# ──────────────────────────────────────────────────────────────
-# TAB 3: 나중에 작업하기
-# ──────────────────────────────────────────────────────────────
-with video_tab3:
-    st.caption("이미지 생성을 해놓고 나중에 음성이랑 합칠 때 사용해요. 대본 파일 넣으면 글자수 기준으로 싱크 맞춰줘요!")
-
-    st.markdown("#### 📁 파일 업로드")
-    later_col1, later_col2 = st.columns(2)
-    with later_col1:
-        later_zip = st.file_uploader("🖼️ 이미지 ZIP", type=["zip"], key="later_zip")
-        if later_zip:
-            st.success(f"✅ {later_zip.name}")
-    with later_col2:
-        later_audio = st.file_uploader("🔊 음성파일", type=["mp3","wav","m4a"], key="later_audio")
-        if later_audio:
-            st.success(f"✅ {later_audio.name}")
-
-    later_script = st.file_uploader("📄 대본 txt 파일 (있으면 글자수 기준 싱크 자동 적용!)", type=["txt"], key="later_script")
-    if later_script:
-        st.success(f"✅ {later_script.name} — 글자수 기준 싱크 적용!")
-    else:
-        st.caption("대본 없으면 이미지 균등 분배로 진행해요.")
-
-    later_kb = st.selectbox("🎥 Ken Burns 효과", ["랜덤 (자동)", "줌인만", "줌아웃만", "좌→우 패닝", "우→좌 패닝", "위→아래", "아래→위", "사선", "없음"], key="later_kb")
-
-    if later_script:
-        later_sync_col1, later_sync_col2, later_sync_col3 = st.columns(3)
-        with later_sync_col1:
-            later_tts_speed = st.select_slider("TTS 배속", options=[0.8,0.9,1.0,1.1,1.2,1.3,1.5], value=1.2, format_func=lambda x: f"{x}배속", key="later_tts_speed")
-        with later_sync_col2:
-            later_intro_sec = st.slider("인트로 컷(초)", 4, 8, 6, key="later_intro_sec")
-        with later_sync_col3:
-            later_body_sec = st.select_slider("본문 컷(초)", options=[15,20,25,30,35,40,45,50,60], value=30, key="later_body_sec")
-
-    import os as _os
-    later_output = _os.path.join(_os.path.expanduser("~"), "Downloads", f"딩푸수_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4")
-    st.info(f"💾 저장 위치: {later_output}")
-    later_silence = st.slider("무음 유지 길이 (ms)", 100, 500, 200, step=50, key="later_silence")
-
-    if st.button("🎬 영상 생성 시작", type="primary", use_container_width=True, key="later_gen_btn"):
-        if not later_zip or not later_audio:
-            st.error("ZIP 파일과 음성파일을 업로드해주세요.")
-        else:
-            try:
-                from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips
-                from pydub import AudioSegment, silence as pydub_silence
-                import tempfile, random, zipfile as zf_module, os
-
-                with st.spinner("✂️ 무음 제거 중..."):
-                    audio_bytes = later_audio.read()
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_in:
-                        tmp_in.write(audio_bytes)
-                        tmp_in_path = tmp_in.name
-                    audio_seg = AudioSegment.from_file(tmp_in_path)
-                    orig_dur = len(audio_seg) / 1000
-                    chunks = pydub_silence.split_on_silence(audio_seg, min_silence_len=400, silence_thresh=-40, keep_silence=later_silence)
-                    if not chunks: chunks = [audio_seg]
-                    trimmed = chunks[0]
-                    for c in chunks[1:]: trimmed += c
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_out:
-                        trimmed.export(tmp_out.name, format="mp3", bitrate="192k")
-                        tmp_audio_path = tmp_out.name
-                    st.success(f"✅ 무음 제거: {orig_dur:.1f}초 → {len(trimmed)/1000:.1f}초")
-
-                with st.spinner("📦 ZIP에서 이미지 추출 중..."):
-                    tmp_dir = tempfile.mkdtemp()
-                    zip_bytes = later_zip.read()
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_zip:
-                        tmp_zip.write(zip_bytes)
-                        tmp_zip_path = tmp_zip.name
-                    with zf_module.ZipFile(tmp_zip_path, "r") as zref:
-                        img_files = sorted([f for f in zref.namelist() if f.endswith((".png",".jpg",".jpeg"))])
-                        zref.extractall(tmp_dir)
-                    img_paths = sorted([os.path.join(tmp_dir, f) for f in img_files])
-                    st.success(f"✅ 이미지 {len(img_paths)}개 추출됨")
-
-                audio_clip = AudioFileClip(tmp_audio_path)
-                total_dur = audio_clip.duration
-
-                if later_script:
-                    with st.spinner("📄 대본 기반 싱크 계산 중..."):
-                        later_script.seek(0)
-                        script_text = later_script.read().decode("utf-8", errors="ignore")
-                        raw = re.split(r'(?<=[.!?。])\s*|\n+', script_text.strip())
-                        sentences = [s.strip() for s in raw if s.strip() and len(s.strip()) >= 3]
-                        def cps(sec): return round(sec * 4.5 * later_tts_speed)
-                        intro_chars = cps(later_intro_sec)
-                        body_chars = cps(later_body_sec)
-                        cuts_list = []
-                        intro_done = False
-                        current = ""
-                        intro_total = 0
-                        for sent in sentences:
-                            if not intro_done:
-                                if intro_total + len(sent) <= 400:
-                                    current = (current + " " + sent).strip()
-                                    intro_total += len(sent)
-                                    if len(current) >= intro_chars:
-                                        cuts_list.append(current)
-                                        current = ""
-                                else:
-                                    if current:
-                                        cuts_list.append(current)
-                                    current = sent
-                                    intro_done = True
-                            else:
-                                if not current:
-                                    current = sent
-                                elif len(current) + len(sent) + 1 <= body_chars * 1.2:
-                                    current += " " + sent
-                                else:
-                                    cuts_list.append(current.strip())
-                                    current = sent
-                        if current:
-                            cuts_list.append(current.strip())
-
-                        total_chars = sum(len(c) for c in cuts_list)
-                        clip_durations = [total_dur * (len(c) / total_chars) for c in cuts_list]
-
-                        n_imgs = len(img_paths)
-                        n_cuts = len(cuts_list)
-                        if n_imgs != n_cuts:
-                            st.warning(f"⚠️ 이미지 {n_imgs}개 vs 대본 컷 {n_cuts}개 — 균등 분배로 전환")
-                            clip_durations = [total_dur / n_imgs] * n_imgs
-                        else:
-                            st.success(f"✅ 대본 {n_cuts}컷 기준 싱크 적용!")
-                else:
-                    clip_durations = [total_dur / len(img_paths)] * len(img_paths)
-
-                import time as _time
-                with st.spinner("🎬 영상 생성 중..."):
-                    kb_map = {"랜덤 (자동)": "random", "줌인만": "zoom_in", "줌아웃만": "zoom_out", "좌→우 패닝": "pan_right", "우→좌 패닝": "pan_left", "위→아래": "pan_down", "아래→위": "pan_up", "사선": "pan_diagonal", "없음": "none"}
-                    kb_mode = kb_map.get(later_kb, "random")
-
-                    # 랜덤이면 7가지 패턴 골고루 셔플
-                    if kb_mode == "random":
-                        motion_list = _get_shuffled_motions(len(img_paths))
-                    else:
-                        motion_list = [kb_mode] * len(img_paths)
-
-                    # 1단계: 클립 생성 (진행바 + 시간 예측)
-                    clips = []
-                    prog = st.progress(0, text="🎬 클립 생성 중...")
-                    time_status = st.empty()
-                    clip_start = _time.time()
-                    for idx, img_path in enumerate(img_paths):
-                        dur = clip_durations[idx] if idx < len(clip_durations) else total_dur / len(img_paths)
-                        clip = ImageClip(img_path, duration=dur).set_fps(30)
-                        clip = _apply_motion(clip, motion_list[idx])
-                        clips.append(clip)
-                        elapsed = _time.time() - clip_start
-                        done_ratio = (idx+1) / len(img_paths)
-                        if idx > 0:
-                            remaining = (elapsed / (idx+1)) * (len(img_paths) - idx - 1)
-                            mins, secs = divmod(int(remaining), 60)
-                            time_str = f"{mins}분 {secs}초" if mins > 0 else f"{secs}초"
-                            time_status.info(f"⏱ 클립 생성 중... {idx+1}/{len(img_paths)} — 예상 남은 시간: 약 {time_str}")
-                        prog.progress(done_ratio, text=f"클립 생성 {idx+1}/{len(img_paths)}")
-
-                    time_status.success(f"✅ 클립 {len(img_paths)}개 생성 완료!")
-
-                    # 2단계: 렌더링 (예상 시간 안내)
-                    est_render = int(total_dur * 0.8)
-                    mins, secs = divmod(est_render, 60)
-                    render_str = f"약 {mins}분 {secs}초" if mins > 0 else f"약 {secs}초"
-                    render_status = st.info(f"⚙️ 영상 렌더링 중... (예상 {render_str} 소요) 잠깐 기다려요!")
-                    render_start = _time.time()
-                    final = concatenate_videoclips(clips, method="compose").set_audio(audio_clip)
-                    final.write_videofile(later_output, fps=30, codec="libx264", audio_codec="aac", threads=4, logger=None)
-                    render_elapsed = int(_time.time() - render_start)
-                    r_mins, r_secs = divmod(render_elapsed, 60)
-                    render_str2 = f"{r_mins}분 {r_secs}초" if r_mins > 0 else f"{r_secs}초"
-                    render_status.success(f"✅ 렌더링 완료! (실제 소요: {render_str2})")
-
-                st.balloons()
-                st.success(f"🎉 영상 완성! → {later_output}")
-
-            except ImportError as e:
-                st.error(f"패키지 오류: {e}")
-            except Exception as e:
-                st.error(f"오류 발생: {e}")
 
 
 if st.session_state.step >= 3 and cuts:
