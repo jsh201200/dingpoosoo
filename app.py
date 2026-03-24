@@ -5,101 +5,6 @@ import base64, io, re, time, json, datetime, zipfile
 from PIL import Image
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Pillow 최신버전 호환성 패치
-from PIL import Image as _PILImage
-if not hasattr(_PILImage, 'ANTIALIAS'):
-    _PILImage.ANTIALIAS = _PILImage.LANCZOS
-
-def _apply_motion(clip, mode):
-    """항상 화면 꽉 찬 상태로 시작, 5가지 패턴 + 줌"""
-    import random
-    w, h = clip.size
-    dur = clip.duration
-    SCALE = 1.25  # 항상 1.25배 크롭 상태로 시작
-
-    if mode == "none":
-        return clip
-
-    if mode == "random":
-        mode = random.choice([
-            "zoom_in", "zoom_out",
-            "pan_left", "pan_right",
-            "pan_up", "pan_down", "pan_diagonal"
-        ])
-
-    if mode == "zoom_in":
-        # 1.25 → 1.5 (항상 꽉 찬 상태)
-        def zoom(t): return 1.25 + 0.25 * (t / dur)
-        return clip.resize(zoom)
-
-    elif mode == "zoom_out":
-        # 1.5 → 1.25
-        def zoom(t): return 1.5 - 0.25 * (t / dur)
-        return clip.resize(zoom)
-
-    elif mode == "pan_left":
-        # 오른쪽에서 왼쪽으로
-        big = clip.resize(SCALE)
-        bw, bh = int(w * SCALE), int(h * SCALE)
-        max_x = bw - w
-        def pos(t): return (-int(max_x * (t / dur)), -int((bh - h) / 2))
-        return big.set_position(pos).set_duration(dur).crop(x1=0, y1=0, width=w, height=h)
-
-    elif mode == "pan_right":
-        # 왼쪽에서 오른쪽으로
-        big = clip.resize(SCALE)
-        bw, bh = int(w * SCALE), int(h * SCALE)
-        max_x = bw - w
-        def pos(t): return (-int(max_x * (1 - t / dur)), -int((bh - h) / 2))
-        return big.set_position(pos).set_duration(dur).crop(x1=0, y1=0, width=w, height=h)
-
-    elif mode == "pan_up":
-        # 아래에서 위로
-        big = clip.resize(SCALE)
-        bw, bh = int(w * SCALE), int(h * SCALE)
-        max_y = bh - h
-        def pos(t): return (-int((bw - w) / 2), -int(max_y * (t / dur)))
-        return big.set_position(pos).set_duration(dur).crop(x1=0, y1=0, width=w, height=h)
-
-    elif mode == "pan_down":
-        # 위에서 아래로
-        big = clip.resize(SCALE)
-        bw, bh = int(w * SCALE), int(h * SCALE)
-        max_y = bh - h
-        def pos(t): return (-int((bw - w) / 2), -int(max_y * (1 - t / dur)))
-        return big.set_position(pos).set_duration(dur).crop(x1=0, y1=0, width=w, height=h)
-
-    elif mode == "pan_diagonal":
-        # 사선 이동 (랜덤 방향)
-        import random as _r
-        dx = _r.choice([-1, 1])
-        dy = _r.choice([-1, 1])
-        big = clip.resize(SCALE)
-        bw, bh = int(w * SCALE), int(h * SCALE)
-        max_x = bw - w
-        max_y = bh - h
-        def pos(t):
-            px = -int((max_x / 2) + dx * (max_x / 2) * (t / dur))
-            py = -int((max_y / 2) + dy * (max_y / 2) * (t / dur))
-            return (px, py)
-        return big.set_position(pos).set_duration(dur).crop(x1=0, y1=0, width=w, height=h)
-
-    return clip
-
-
-def _get_shuffled_motions(n):
-    """n개 클립에 대해 5가지 패턴을 골고루 섞어서 반환"""
-    import random
-    patterns = ["zoom_in", "zoom_out", "pan_left", "pan_right", "pan_up", "pan_down", "pan_diagonal"]
-    result = []
-    while len(result) < n:
-        shuffled = patterns[:]
-        random.shuffle(shuffled)
-        result.extend(shuffled)
-    return result[:n]
-
-
-
 # ── 페이지 설정 ────────────────────────────────────────────────
 st.set_page_config(page_title="딩푸수 메이커", page_icon="🎬", layout="wide", initial_sidebar_state="expanded")
 
@@ -120,98 +25,119 @@ st.markdown("""
 # ── 스타일 프리셋 ──────────────────────────────────────────────
 STYLE_PRESETS = {
     "🐿️ Pixar/Disney 3D": (
-        "Art style: Pixar and Disney CGI animation — high-quality 3D render, "
-        "large soulful eyes, soft detailed fur/skin, fluid proportions, "
-        "vibrant saturated colors, warm rim lighting, volumetric light rays, "
-        "polished warm emotionally engaging Pixar feature film quality."
+        "Pixar and Disney CGI animation style, high-quality 3D render. "
+        "When character reference is provided: render that character with large soulful eyes, soft detailed fur, "
+        "fluid proportions, richly detailed outfit matching scene context. "
+        "When NO character reference: use an expressive anthropomorphic animal character "
+        "OR a stylized Pixar-style human character — whichever fits the scene better. "
+        "Cinematic depth of field, vibrant saturated colors, warm rim lighting, volumetric light rays. "
+        "Background is a fully realized stylized 3D environment matching the scene content exactly. "
+        "Foreground, midground, background depth layers. "
+        "Any text sharply rendered, legible, correctly spelled. "
+        "Polished, warm, emotionally engaging — Pixar feature film quality."
     ),
     "📰 뉴스/시사 다큐": (
-        "Art style: editorial hand-drawn ink-and-wash illustration, Quentin Blake aesthetic. "
-        "Loose expressive scribbled ink lines — thick where dramatic, thin where delicate. "
-        "High-contrast: stark white against deep charcoal shadows. "
-        "Minimal watercolor wash — deep crimson, cold navy, urgent ochre. "
-        "Raw, unfinished, powerful — breaking news drawn under deadline pressure."
+        "Editorial illustration in hand-drawn ink-and-wash style of Quentin Blake, news urgency aesthetic. "
+        "Loose expressive scribbled ink line work — thick where dramatic, thin where delicate. "
+        "High-contrast: stark white areas against deep charcoal black shadows. "
+        "Minimal transparent watercolor wash — washed deep crimson red, cold navy blue, urgent ochre yellow. "
+        "Any text (속보, 긴급, headlines, labels) as bold hand-lettered stenciled text on banners or torn paper. "
+        "Characters show exaggerated emotion through body language. "
+        "Raw, unfinished, powerful — breaking news illustration drawn under deadline pressure. "
+        "Background environment must match the script topic exactly — NOT a news desk unless script is literally about news."
     ),
     "😊 실사 다큐 포토": (
-        "Art style: National Geographic photojournalism, cinematic documentary photography. "
+        "National Geographic photojournalism aesthetic, cinematic documentary photography. "
+        "When character reference is provided: render that character with extreme photorealistic fur/skin detail. "
+        "When NO character reference: focus on environment and situation — "
+        "use silhouetted anonymous human figures (no identifiable face), hands, symbolic objects, "
+        "or pure environmental storytelling. NO random animals unless script mentions animals. "
         "Shallow depth of field — subject razor sharp, background bokeh. "
-        "Volumetric natural lighting. Shot on Canon EOS R5, 85mm f/1.4, 8K. "
-        "Cinematic LUT color grade. World Press Photo award quality."
+        "Volumetric natural lighting matching scene mood: golden-hour / cold fluorescence / dramatic spotlight. "
+        "Background is a fully detailed real-world environment matching script content exactly. "
+        "Shot on Canon EOS R5, 85mm f/1.4, 8K. Cinematic LUT color grade. World Press Photo award quality."
     ),
     "🎨 퀜틴 블레이크 수채화": (
-        "Art style: Quentin Blake hand-drawn illustration — loose, joyful, humanistic. "
-        "Scribbled expressive black ink lines with deliberate imperfection. "
-        "Layered transparent watercolor washes: warm blues, pale greens, golden ochre, dusty rose. "
-        "Pure white background preserved for luminosity. Elastic exaggerated character proportions."
+        "Quentin Blake hand-drawn illustration — loose, joyful, humanistic. "
+        "Scribbled expressive black ink lines with deliberate imperfection and energy. "
+        "Layered transparent watercolor washes: warm blues, pale greens, golden ochre, dusty rose, soft reds. "
+        "Pure white background preserved in key areas for luminosity. "
+        "Characters with elastic exaggerated proportions — rubbery limbs, tilted heads, enormous expressive eyes. "
+        "Background loosely suggested with gestural strokes establishing location. "
+        "Any text as hand-lettered script organically woven into illustration. "
+        "Background setting must reflect scene content — could be outdoors, indoors, abstract, anywhere."
     ),
     "🎭 흑백 드라마 잉크": (
-        "Art style: stark black-and-white ink illustration — political cartoon meets graphic novel. "
-        "Bold brush strokes, razor-thin detail lines, thick slashing impact strokes. "
+        "Stark black-and-white ink illustration — political cartoon meets graphic novel. "
+        "Bold deliberate brush strokes: razor-thin detail lines, thick slashing impact strokes. "
         "Chiaroscuro: deep black shadow pools, sharp white highlights, zero mid-tones. "
-        "Strong diagonals, extreme angles. Zero color — only black ink on white."
+        "Strong diagonals, extreme angles, silhouettes against harsh white. "
+        "Characters anatomically exaggerated for emotional effect. "
+        "Background as bold graphic shapes matching scene environment. "
+        "Any text as bold high-contrast block lettering. Zero color. Only black ink on white."
     ),
     "✏️ 모던 인포그래픽": (
-        "Art style: clean sophisticated modern editorial illustration — flat design meets fine art. "
-        "Precise 1pt outlines, purely geometric shapes. "
-        "Flat color fills: 4-5 color palette maximum. "
-        "Typographically clean text. Korean economics magazine cover aesthetic."
+        "Clean sophisticated modern editorial illustration — information design meets fine art. "
+        "Precise consistent 1pt outlines, purely geometric. "
+        "Flat color fills: 4-5 color palette maximum, one neutral, two accents, one dark anchor. "
+        "Data visualization elements (charts, graphs, maps, timelines) as crisp graphic elements. "
+        "Any text typographically clean, correctly spelled, sized as core compositional element. "
+        "Background environment simplified into graphic shapes matching scene content. "
+        "Prestigious Korean economics magazine cover aesthetic."
     ),
     "📊 경제학 유튜브": (
-        "Art style: Korean documentary YouTube illustration — bold high-energy visual storytelling. "
-        "High contrast colors, dynamic composition, expressive lines. "
-        "Energy: MBC documentary meets Kurzgesagt — urgent, vivid, informative visual style."
+        "Korean economics/documentary YouTube illustration style. "
+        "Bold, high-energy visual storytelling with dramatic color contrasts. "
+        "Color palette: freely chosen to best match the specific scene's content and emotion. "
+        "When the script involves economics/geopolitics: integrate world maps, trade arrows, charts, "
+        "currency symbols, flag icons, statistics naturally into the background if relevant. "
+        "When the script involves other topics: use fitting environments in the same bold energetic style. "
+        "Characters expressive and dynamic, mid-action. "
+        "Korean text labels only when adding clear informational value. "
+        "Overall energy: MBC documentary meets Kurzgesagt — urgent, informative, visually exciting."
     ),
     "🖌️ 커스텀": "",
 }
 
 # 캐릭터 없을 때 fallback 지시
 STICKMAN_FALLBACK = (
-    "No character reference provided. ENVIRONMENT and OBJECTS are the main subject. "
-    "If human presence is needed, use ONLY: small silhouette in distance, hands interacting with objects, "
-    "or back-view person looking at the scene. Never show face. Never make human the focal point. "
-    "The scene should feel like a quiet documentary photo — realistic, calm, not dramatic. "
+    "No specific character reference provided. "
+    "Represent the human element using ONE of these approaches (choose what fits the scene best): "
+    "1. SILHOUETTE — dark human outline against dramatic backlit background, no facial features visible. "
+    "2. BACK VIEW — person seen from behind, facing toward the scene, viewer follows their gaze. "
+    "3. SIDE PROFILE — partial face visible, no identifiable features, focus on expression/posture. "
+    "4. HANDS/BODY ONLY — close-up on hands interacting with objects, or body from neck down. "
+    "5. ANONYMOUS CROWD — multiple figures without individual facial detail. "
+    "6. STICKMAN — simple 2D stick figure with expressive pose if the style suits it. "
+    "Choose whichever creates the most cinematic and emotionally resonant image for this scene. "
+    "Never generate an identifiable or realistic human face. "
 )
 
 # 모든 스타일에 공통 적용되는 품질 기본 지시
 # (스타일 프롬프트 뒤에 항상 자동 추가됨)
 BASE_QUALITY = (
-    "BACKGROUND IS EVERYTHING — make it SPECIFIC, RICH, and VARIED every single scene. "
-    "Never repeat similar backgrounds. Each scene = a completely different, unique location. "
-    "SPECIFIC over generic: NOT 'gym' but 'dimly lit gym with chalk-dusted barbells, cracked mirrors, rubber mat smell implied visually'. "
-    "NOT 'office' but 'cluttered desk with sticky notes, monitor glow casting blue light, rain-streaked window showing city below'. "
-    "NOT 'street' but 'narrow alley market, hanging red lanterns, steam from food stalls, wet cobblestones reflecting neon'. "
-    "DEPTH LAYERS: Strong foreground texture (objects, plants, furniture), busy midground (people/activity/architecture), "
-    "atmospheric background (sky, distant buildings, nature) — every layer filled with detail. "
-    "LIGHTING: Ultra-specific — golden hour warmth, harsh fluorescent buzz, moody neon glow, overcast diffused grey, "
-    "dramatic spotlight, candlelight flicker — lighting MATCHES the script emotion precisely. "
-    "ATMOSPHERE: Time of day, weather, season all VISIBLE — morning fog, evening shadow, summer heat haze, winter frost. "
-    "If character present: small in frame (max 25%), reacting naturally to environment, never posed stiffly. "
-    "Cinematic masterpiece quality. Zero generic backgrounds. Every corner tells the story."
+    "HIGH DETAIL: richly detailed background environment that matches the script content exactly — "
+    "NOT a generic office or news desk unless the script is literally about that. "
+    "The background tells the story as much as the character. "
+    "Expressive character with clear emotion visible in face and body posture. "
+    "Dynamic lighting that matches the scene mood. "
+    "Foreground, midground, and background layers for depth. "
+    "Cinematic quality, highly detailed, masterpiece level rendering."
 )
 
 
 LANGUAGE_SETTINGS = {
     "언어 없음": "NO text, letters, words, or numbers anywhere in the image.",
-    "한국어": (
-        "KOREAN TEXT: Include 1~3 SHORT Korean keywords naturally embedded in the scene — "
-        "on signs, banners, newspapers, screens, storefronts, or packaging. "
-        "Examples: shop sign says '폐업', newspaper headline says '위기', building banner says '분양', "
-        "screen shows '하락', poster says '할인'. "
-        "Text must feel ORGANIC to the environment — not floating labels. "
-        "Choose words that reinforce the script's core message. Max 2-3 characters per text element."
-    ),
-    "일본어": "MINIMAL Japanese text only — 1~2 short words on signs or props if natural. Default to NO text.",
-    "영어": "MINIMAL English text only — 1~2 short words on signs or props if natural. Default to NO text.",
+    "한국어": "MINIMAL Korean text only — maximum 1~2 short words on signs or key visual elements if absolutely essential to the scene. Default to NO text unless critical.",
+    "일본어": "MINIMAL Japanese text only — maximum 1~2 short words if absolutely essential. Default to NO text.",
+    "영어": "MINIMAL English text only — maximum 1~2 short words if absolutely essential. Default to NO text.",
 }
 
 # ── 세션 초기화 ────────────────────────────────────────────────
 for k, v in [("cuts",[]),("sections",[]),("styles",[]),("prompts",[]),
              ("scenes",[]),("images",[]),("step",0),("errors",[]),
              ("regen_idx",None),("last_intro",""),("last_body",""),
-             ("last_intro_sec",4),("last_body_sec",20),("last_tts",1.2),
-             ("auto_zip_ready",False),("auto_zip_data",None),("auto_zip_name",""),
-             ("supertone_voices",[]),("supertone_voice_id",""),
-             ("tts_bytes",None),("tts_duration",0),("tts_cuts_durations",[])]:
+             ("last_intro_sec",4),("last_body_sec",20),("last_tts",1.2)]:
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -338,82 +264,57 @@ def build_prompt(client, cut, style_prefix, character_b64, language, idx, total)
     """대본 내용 최우선 → 배경/구도/감정 자동 결정"""
     lang = LANGUAGE_SETTINGS[language]
 
-    # 캐릭터 있으면: 배경 속 내레이터/가이드 역할
+    # 캐릭터 있으면: 스타일 프롬프트가 뭐든 이 캐릭터가 주인공
     char_note = (
-        "CHARACTER ROLE: This character is a NARRATOR/GUIDE within the scene — NOT the main subject. "
-        "CRITICAL: Preserve species, face, body proportions, fur/skin color EXACTLY from reference. "
-        "PLACEMENT: Character should occupy MAX 25-30% of frame. Show from behind, side profile, or small against background. "
-        "Character is REACTING to the environment naturally — not posing for the camera. "
-        "The environment and situation behind/around the character is the TRUE subject of the image. "
-        "ONLY change: expression (subtle), outfit (match context), pose (natural reaction). "
+        "CRITICAL: The main character MUST be the exact same character as in the reference image. "
+        "Preserve species, face shape, body proportions, fur/skin color and texture EXACTLY. "
+        "ONLY change: expression (match scene emotion), outfit (match scene context), pose/action. "
+        "This applies regardless of the art style — same character, different style rendering. "
     ) if character_b64 else STICKMAN_FALLBACK
 
     comp_hints = [
-        # 카메라 앵글
-        "Wide establishing shot — character tiny in corner, vast environment dominates.",
-        "Low angle looking up — character stands confidently, sky or ceiling fills 70% of frame.",
-        "Bird's eye view — character seen from above, surrounded by objects/environment.",
-        "Dutch angle — slightly tilted frame, creates unease or tension naturally.",
-        "Over-the-shoulder — viewer follows character's gaze into the scene.",
-        # 행동/자세
-        "Character mid-stride, walking purposefully through the environment.",
-        "Character crouching or kneeling, examining something on the ground.",
-        "Character leaning against a wall or structure, arms crossed, contemplating.",
-        "Character reaching out or pointing at something in the environment.",
-        "Character sitting down, looking out — thoughtful, observational pose.",
-        "Character turning around mid-action, caught in a dynamic moment.",
-        "Character standing with back to viewer, facing the vast scene ahead.",
-        "Character running or rushing through the environment, motion blur implied.",
-        "Character looking up at something towering above them.",
-        "Character holding or interacting with a key object — hands in focus.",
-        "Character partially hidden — peeking around corner, behind object.",
-        "Character in mid-jump or dynamic leap, energy and movement.",
-        "Character arms spread wide — embracing, presenting, or reacting to environment.",
-        "Character hunched over, shoulders low — exhausted or deep in thought.",
-        "Character looking directly at something off-frame — curiosity or tension.",
+        "Consider an extreme close-up if emotion is intense.",
+        "Consider a wide shot to show the environment's scale.",
+        "Consider a low angle to make the subject feel powerful.",
+        "Consider an over-the-shoulder shot for a point-of-view feel.",
+        "Consider a bird's eye view for an overview feel.",
+        "Consider a dutch angle for tension or unease.",
+        "Consider silhouetting the character against a dramatic backdrop.",
+        "Consider showing hands or a key object in the foreground.",
+        "Consider placing the character small against a vast background.",
+        "Consider a side profile shot showing movement or direction.",
+        "Consider a worm's eye view looking up dramatically.",
+        "Consider a two-thirds composition with environment telling the story.",
     ]
     comp_hint = comp_hints[(idx - 1) % len(comp_hints)]
 
-    sys = f"""You are a VISUAL TRANSLATOR for Korean YouTube content. Your only job: READ the Korean script carefully and describe EXACTLY what it says as a visual scene.
+    sys = f"""You are a visual interpreter — your job is to READ the Korean script deeply and translate its TRUE MEANING into a vivid visual scene.
 
-STEP 1 — EXTRACT: What does the script LITERALLY say is happening?
-- People, places, objects, actions mentioned in the text
-- Do NOT invent metaphors. Do NOT substitute with mood/atmosphere.
-- If script says "missiles fired into sea" → show missiles and sea. Not a living room. Not a person looking sad.
+MOST IMPORTANT: Don't just describe what the words say literally. Capture what they MEAN and FEEL.
 
-STEP 2 — VISUALIZE: Turn the literal content into a specific cinematic shot:
-- WHERE is this happening? (exact location from script)
-- WHAT is the main visual action? (what the script describes)
-- WHO or WHAT is the subject? (from script, not invented)
-- WHAT Korean text reinforces this? (1-2 words on signs/screens)
+HOW TO INTERPRET:
+- Metaphors → visualize them literally: "뚱냥이처럼 늘어진 몸" = a fat lazy cat melting into a bed
+- Abstract concepts → make them physical: "의지력이 바닥났다" = an empty fuel gauge, a drained battery
+- Emotional states → show in body and environment: "뇌가 파업" = factory shutdown, workers sitting down, machines stopped
+- Comparisons → show both sides visually: "기름 없는 차" = car broken down, empty gauge, person pushing it
+- Irony/contrast → show the tension: "성공하고 싶은데 못 움직인다" = person with fire in eyes but body stuck in quicksand
 
-EXAMPLES OF CORRECT TRANSLATION:
-- "김정은이 미사일 10발을 동해에 쏘았다" → missiles arcing over dark sea at night, North Korean launch site visible on distant shore, smoke trails in sky, waves below
-- "헬스장이 폐업했다" → closed gym, locked glass doors with '폐업' sign, dusty equipment visible inside, empty parking lot
-- "기름값이 올랐다" → gas station price board showing high numbers with upward arrow, character staring at it in shock
-- "전쟁 나는 거 아냐?" → person at night watching news on laptop, screen glow on worried face, '긴급' text visible on screen
+PROCESS:
+1. What does this script REALLY mean? (not just the surface words)
+2. What single image would make someone instantly GET it without reading?
+3. What emotion hits you first when you read this?
+4. What's the most DIRECT visual metaphor for this idea?
 
-YOUTUBE SAFETY (only for truly sensitive content):
-- Graphic violence → show aftermath/implication, not gore
-- Real identifiable people → show from behind or as silhouette only
-- Otherwise: show what the script ACTUALLY says
-
-CHARACTER (if provided):
-- Place them naturally IN the scene described by script
-- 30-40% of frame, doing something relevant
-- Their reaction matches what the script describes
-
-COMPOSITION: {comp_hint}
-
-Write 80-100 words in English. Translate the script LITERALLY into a visual scene. Stay true to what the script says."""
+Then describe that scene: who, doing what, where, in what light, with what emotion.
+Be SPECIFIC and VISUAL. 80-100 words, English only. No style words."""
 
     r = client.models.generate_content(
         model="gemini-2.5-flash",
-        contents=f'Script segment {idx}/{total}:\n"{cut}"\n\nNow describe this scene in full detail:',
+        contents=f'Script segment {idx}/{total}:\n"{cut}"\n\nDescribe the scene:',
         config=types.GenerateContentConfig(
             system_instruction=sys,
             temperature=0.7,
-            max_output_tokens=600,
+            max_output_tokens=200,
         )
     )
     scene = r.text.strip().strip('"').strip("'")
@@ -584,84 +485,11 @@ with st.sidebar:
     st.markdown("### ⚡ 병렬 작업")
     parallel_workers = st.slider("동시 작업 수", 1, 8, 4, step=1, label_visibility="collapsed")
     st.caption(f"{parallel_workers}개 동시 생성")
-    st.divider()
-
-    # 슈퍼톤 TTS
-    st.markdown("### 🎙️ 슈퍼톤 TTS (자동생성)")
-    supertone_key = st.text_input("Supertone API Key", type="password", placeholder="sup-...", label_visibility="collapsed", key="supertone_key_input")
-    if supertone_key:
-        st.success("✓ 연결됨", icon="✅")
-
-    # 미리 등록된 목소리 목록
-    MY_VOICE_IDS = [
-        "ad67887f07639d2973f48a",
-        "fd15ad31caa16bd021f01d",
-        "4653d63d07d5340656b6bc",
-        "a10e8ce028df532ae29156",
-        "ca0b75f0fc2ee0ab6fa54d",
-        "7dface2224d0a4d9d0b2fe",
-        "1f6b70f879da125bfec245",
-        "92d063343b7289e202494c",
-        "4680c81c69d8490a044413",
-        "2fa608a50f2489afc644bf",
-        "195e1922033a6168f0c90f",
-        "9d5dfb8036afacd09cd125",
-        "c9220df3a5a70647d7b022",
-        "7c56c6a6471a12816604f0",
-        "39f27eaab088024ff6f9ac",
-        "d7e4020428db55691c0020",
-    ]
-
-    if supertone_key and not st.session_state.supertone_voices:
-        if st.button("🔄 목소리 불러오기", use_container_width=True, key="load_voices_btn"):
-            import requests as _req2
-            all_voices = []
-            prog_v = st.progress(0, text="불러오는 중...")
-            for i, vid in enumerate(MY_VOICE_IDS):
-                resp = _req2.get(f"https://supertoneapi.com/v1/voices/{vid}", headers={"x-sup-api-key": supertone_key})
-                if resp.status_code == 200:
-                    all_voices.append(resp.json())
-                else:
-                    resp2 = _req2.get(f"https://supertoneapi.com/v1/custom-voices/{vid}", headers={"x-sup-api-key": supertone_key})
-                    if resp2.status_code == 200:
-                        v = resp2.json()
-                        v["name"] = f"⭐ {v.get('name', vid[:8])}"
-                        all_voices.append(v)
-                prog_v.progress((i+1)/len(MY_VOICE_IDS), text=f"{i+1}/{len(MY_VOICE_IDS)} 불러오는 중...")
-            st.session_state.supertone_voices = all_voices
-            st.success(f"✅ {len(all_voices)}개 로드됨!")
-            st.rerun()
-
-    if st.session_state.supertone_voices:
-        voice_options = {f"{v.get('name','?')} ({v.get('gender','')}/{v.get('age','')})": v.get('voice_id') or v.get('id','') for v in st.session_state.supertone_voices}
-        selected_voice_name = st.selectbox("목소리 선택", list(voice_options.keys()), label_visibility="collapsed", key="voice_select")
-        st.session_state.supertone_voice_id = voice_options[selected_voice_name]
-        selected_v = next((v for v in st.session_state.supertone_voices if (v.get('voice_id') or v.get('id')) == st.session_state.supertone_voice_id), None)
-        avail_styles = selected_v.get("styles", ["neutral"]) if selected_v else ["neutral"]
-        if selected_v and selected_v.get("samples"):
-            sample = next((s for s in selected_v["samples"] if s.get("language") == "ko"), selected_v["samples"][0])
-            if sample.get("url"):
-                st.audio(sample["url"], format="audio/wav")
-    elif supertone_key:
-        st.caption("위 버튼을 눌러 목소리를 불러오세요")
-        avail_styles = ["neutral"]
-    else:
-        avail_styles = ["neutral"]
-
-    supertone_style = st.selectbox("스타일", avail_styles if avail_styles else ["neutral"], label_visibility="collapsed", key="supertone_style")
-    supertone_speed = st.select_slider("배속", options=[0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.5], value=1.2, format_func=lambda x: f"{x}x", label_visibility="collapsed", key="supertone_speed")
-    sup_col1, sup_col2 = st.columns(2)
-    with sup_col1:
-        supertone_pitch = st.slider("음높이", -24, 24, 0, step=1, key="supertone_pitch")
-        st.caption(f"pitch_shift: {supertone_pitch}")
-    with sup_col2:
-        supertone_pitch_var = st.slider("음높이 변화", 0.0, 2.0, 1.0, step=0.1, key="supertone_pitch_var")
-        st.caption(f"pitch_variance: {supertone_pitch_var}")
 
 # ══════════════════════════════════════════════════════════════
 # 메인 영역
 # ══════════════════════════════════════════════════════════════
-col_title, col_btn1, col_btn2 = st.columns([4, 1.2, 1.2])
+col_title, col_btn1, col_btn2, col_btn3 = st.columns([3.5, 1.1, 1.1, 1.4])
 with col_title:
     st.markdown("## 딩푸수 메이커 **v1.0**")
     st.caption("스크립트를 고품질 AI 비주얼 프로덕션으로 즉시 전환하세요.")
@@ -669,12 +497,14 @@ with col_btn1:
     split_only_btn = st.button("✂️ 장면 분할", use_container_width=True)
 with col_btn2:
     gen_btn = st.button("⚡ 일괄 생성", type="primary", use_container_width=True)
+with col_btn3:
+    prompt_only_btn = st.button("📝 프롬프트만 생성", use_container_width=True, help="이미지 생성 없이 프롬프트만 확인")
 
 st.markdown("---")
 
 # 입력 영역 — 인트로 / 본문 2칸
 INTRO_MAX = 400
-BODY_MAX  = 14000
+BODY_MAX  = 12000
 col_intro, col_body = st.columns(2)
 with col_intro:
     st.markdown("**🎬 인트로 스크립트**")
@@ -758,8 +588,91 @@ project_title = st.text_input("프로젝트 통합 제목", placeholder="예: �
                                label_visibility="visible")
 
 # ══════════════════════════════════════════════════════════════
-# 장면 분할만 (미리보기)
+# 프롬프트만 생성
 # ══════════════════════════════════════════════════════════════
+if prompt_only_btn:
+    if not api_key:
+        st.error("API 키를 입력해주세요.")
+        st.stop()
+    if not intro_script.strip() and not body_script.strip():
+        st.error("스크립트를 입력해주세요.")
+        st.stop()
+
+    client = genai.Client(api_key=api_key)
+    st.session_state.errors = []
+    all_cuts, all_sections = [], []
+
+    if intro_script.strip():
+        with st.spinner(f"✂️ 인트로 분할 중..."):
+            try:
+                ic = split_semantic(client, intro_script.strip(), intro_seconds, tts_speed)
+                all_cuts += ic; all_sections += ["intro"] * len(ic)
+            except Exception as e:
+                st.session_state.errors.append(f"인트로 분할 오류: {e}")
+
+    if body_script.strip():
+        with st.spinner(f"✂️ 본문 분할 중..."):
+            try:
+                bc = split_semantic(client, body_script.strip(), body_seconds, tts_speed)
+                all_cuts += bc; all_sections += ["body"] * len(bc)
+            except Exception as e:
+                st.session_state.errors.append(f"본문 분할 오류: {e}")
+
+    if not all_cuts:
+        st.error("분할 실패."); st.stop()
+
+    n = len(all_cuts)
+    st.success(f"✂️ 총 {n}컷 분할 완료 — 프롬프트 생성 시작")
+
+    prompts_out = [None]*n
+    scenes_out  = [None]*n
+    prog = st.progress(0, text="📝 프롬프트 생성 중...")
+
+    def _make_prompt_only(args):
+        i, cut = args
+        try:
+            p, sc = build_prompt(client, cut, style_prefix, character_b64, language, i+1, n)
+            return i, p, sc, None
+        except Exception as e:
+            sc = cut[:60]
+            p  = f"{style_prefix} SCENE: {sc}. {LANGUAGE_SETTINGS[language]}."
+            return i, p, sc, str(e)
+
+    done = [0]
+    with ThreadPoolExecutor(max_workers=parallel_workers) as ex:
+        futs = {ex.submit(_make_prompt_only, (i, c)): i for i, c in enumerate(all_cuts)}
+        for fut in as_completed(futs):
+            i, p, sc, err = fut.result()
+            if err: st.session_state.errors.append(f"컷{i+1} 오류: {err}")
+            prompts_out[i] = p; scenes_out[i] = sc
+            done[0] += 1
+            prog.progress(done[0]/n, text=f"📝 프롬프트 생성 중... {done[0]}/{n}")
+
+    st.session_state.cuts     = all_cuts
+    st.session_state.sections = all_sections
+    st.session_state.prompts  = prompts_out
+    st.session_state.scenes   = scenes_out
+    st.session_state.images   = [None]*n
+    st.session_state.styles   = [style_prefix]*n
+    st.session_state.step     = 2  # 이미지 없는 상태
+
+    # 프롬프트 TXT 다운로드 파일 생성
+    _pt = project_title.strip() or (all_cuts[0][:20] if all_cuts else "프롬프트")
+    lines = [f"딩푸수 메이커 — 프롬프트 목록", f"프로젝트: {_pt}", "="*50, ""]
+    for i, (cut, sec, prompt, scene) in enumerate(zip(all_cuts, all_sections, prompts_out, scenes_out)):
+        lines.append(f"[SCENE {i+1}] {'인트로' if sec=='intro' else '본문'}")
+        lines.append(f"대본: {cut}")
+        lines.append(f"장면: {scene}")
+        lines.append(f"프롬프트: {prompt}")
+        lines.append("")
+    txt_bytes = "\n".join(lines).encode("utf-8")
+    st.download_button("📄 프롬프트 TXT 다운로드", txt_bytes,
+                       f"{_pt[:20]}_prompts.txt", "text/plain",
+                       type="primary", use_container_width=True)
+
+    st.rerun()
+
+
 if split_only_btn:
     if not api_key:
         st.error("API 키를 입력해주세요.")
@@ -917,7 +830,7 @@ if gen_btn:
                     time.sleep(2)
             except Exception as e:
                 if attempt < 2:
-                    time.sleep(10)  # 재시도 전 10초 대기
+                    time.sleep(3)  # 재시도 전 3초 대기
                 else:
                     return i, None, str(e)
         return i, None, "3회 시도 후 실패"
@@ -941,101 +854,40 @@ if gen_btn:
 
     st.session_state.images = images_out
 
-    # 이미지 성공 여부 확인
-    ok_count = sum(1 for img in images_out if img is not None)
-    if ok_count == 0:
-        st.error("❌ 이미지 생성이 전부 실패했어요. Gemini 서버가 혼잡합니다. 잠시 후 다시 시도해주세요!")
-        st.stop()
-
-    # ── 슈퍼톤 TTS 자동 생성 ─────────────────────────────────────
-    if supertone_key and st.session_state.get("supertone_voice_id"):
-        st.markdown("---")
-        st.markdown("### 🎙️ 슈퍼톤 TTS 자동 생성 중...")
-        try:
-            import requests as _req
-            from pydub import AudioSegment as _AS
-            import tempfile as _tmp2
-
-            tts_prog = st.progress(0, text="🎙️ TTS 생성 중...")
-            tts_segments = []
-            voice_id = st.session_state.supertone_voice_id
-
-            # 300자 제한 → 구간별로 나눠서 생성 후 합치기
-            for idx, cut in enumerate(all_cuts):
-                # 300자 초과시 청크로 분할
-                chunks = [cut[i:i+280] for i in range(0, len(cut), 280)]
-                seg_audio = _AS.empty()
-                for chunk in chunks:
-                    tts_resp = _req.post(
-                        f"https://supertoneapi.com/v1/text-to-speech/{voice_id}",
-                        headers={"x-sup-api-key": supertone_key, "Content-Type": "application/json"},
-                        json={
-                            "text": chunk,
-                            "language": "ko",
-                            "style": supertone_style,
-                            "model": "sona_speech_2",
-                            "output_format": "wav",
-                            "voice_settings": {
-                                "pitch_shift": supertone_pitch,
-                                "pitch_variance": supertone_pitch_var,
-                                "speed": supertone_speed
-                            }
-                        },
-                        timeout=60
-                    )
-                    if tts_resp.status_code == 200:
-                        with _tmp2.NamedTemporaryFile(delete=False, suffix=".wav") as tf:
-                            tf.write(tts_resp.content)
-                            tf_path = tf.name
-                        seg_audio += _AS.from_wav(tf_path)
-                    else:
-                        st.warning(f"컷{idx+1} TTS 오류: {tts_resp.status_code}")
-                tts_segments.append(seg_audio)
-                tts_prog.progress((idx+1)/len(all_cuts), text=f"🎙️ TTS 생성 중... {idx+1}/{len(all_cuts)}")
-
-            # 전체 합치기
-            full_audio = tts_segments[0]
-            for seg in tts_segments[1:]:
-                full_audio += seg
-
-            # 메모리에 저장 후 바로 다운로드 버튼 제공
-            tts_buf = io.BytesIO()
-            full_audio.export(tts_buf, format="mp3", bitrate="192k")
-            tts_bytes = tts_buf.getvalue()
-            tts_duration = len(full_audio)/1000
-            st.session_state["tts_bytes"] = tts_bytes
-            st.session_state["tts_duration"] = tts_duration
-            st.session_state["tts_cuts_durations"] = [len(seg)/1000 for seg in tts_segments]
-            st.success(f"✅ 음성 생성 완료! {tts_duration:.1f}초")
-        except Exception as e:
-            st.error(f"TTS 오류: {e}")
-
-    # ── 자동 ZIP 생성 & 즉시 다운로드 ───────────────────────────
+    # ── 자동 라이브러리 저장 ──────────────────────────────────
     _auto_title = (
         project_title.strip()
         or (all_cuts[0][:20] if all_cuts else "작업")
     )
-    import re as _re
-    _safe_title = _re.sub(r'[\/*?:"<>|]', '', _auto_title).strip()[:30] or "딩푸수메이커"
-
-    # 이미지 있는 컷만 ZIP에 포함
-    _zip_buf = io.BytesIO()
-    with zipfile.ZipFile(_zip_buf, "w") as _zf:
-        for _i, (_img, _cut) in enumerate(zip(images_out, all_cuts)):
-            if _img:
-                _b = io.BytesIO()
-                _img.save(_b, format="PNG")
-                _zf.writestr(f"scene_{_i+1:02d}.png", _b.getvalue())
-        _script_lines = [f"딩푸수 메이커 — {_auto_title}", "=" * 40, ""]
-        for _i, (_cut, _sec) in enumerate(zip(all_cuts, all_sections)):
-            _label = "인트로" if _sec == "intro" else "본문"
-            _script_lines.append(f"[scene_{_i+1:02d}] [{_label}]")
-            _script_lines.append(_cut)
-        _zf.writestr("대본_목록.txt", "\n".join(_script_lines).encode("utf-8"))
-
-    st.session_state["auto_zip_data"]  = _zip_buf.getvalue()
-    st.session_state["auto_zip_name"]  = f"{_safe_title}.zip"
-    st.session_state["auto_zip_ready"] = True
+    _auto_items = []
+    for _i, (_cut, _img) in enumerate(zip(all_cuts, images_out)):
+        _img_b64 = ""
+        if _img:
+            _buf = io.BytesIO(); _img.save(_buf, format="PNG")
+            _img_b64 = base64.b64encode(_buf.getvalue()).decode()
+        _auto_items.append({
+            "cut": _cut,
+            "img": _img_b64,
+            "section": all_sections[_i] if _i < len(all_sections) else "body"
+        })
+    _auto_entry = {
+        "id": str(int(datetime.datetime.now().timestamp() * 1000)),
+        "title": _auto_title,
+        "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "expire": (datetime.datetime.now() + datetime.timedelta(days=2)).timestamp(),
+        "items": _auto_items,
+    }
+    _auto_json = json.dumps(_auto_entry, ensure_ascii=False)
+    st.components.v1.html(f"""<script>
+(function(){{
+  var key='imggen_library';
+  var arr=JSON.parse(localStorage.getItem(key)||'[]');
+  var now=Date.now()/1000;
+  arr=arr.filter(function(e){{return e.expire>now;}});
+  arr.unshift({_auto_json});
+  localStorage.setItem(key,JSON.stringify(arr));
+}})();
+</script>""", height=0)
 
     st.rerun()
 
@@ -1049,47 +901,6 @@ if st.session_state.regen_idx is not None and api_key:
     with st.spinner(f"컷 {idx+1} 재생성 중..."):
         regen_single(client, idx, style_prefix, character_b64, language, aspect_ratio)
     st.rerun()
-
-# ══════════════════════════════════════════════════════════════
-# 자동 ZIP 다운로드 배너
-# ══════════════════════════════════════════════════════════════
-if st.session_state.get("auto_zip_ready") and st.session_state.get("auto_zip_data"):
-    st.balloons()
-    st.success("🎉 생성 완료! 아래에서 파일을 받으세요!")
-
-    dl_col1, dl_col2 = st.columns(2)
-    with dl_col1:
-        st.download_button(
-            "📦 ⬇️ 이미지 ZIP 다운로드",
-            data=st.session_state["auto_zip_data"],
-            file_name=st.session_state["auto_zip_name"],
-            mime="application/zip",
-            type="primary",
-            use_container_width=True,
-            key="auto_zip_dl"
-        )
-    with dl_col2:
-        if st.session_state.get("tts_bytes"):
-            _tts_title = st.session_state.get("auto_zip_name", "딩푸수").replace(".zip", "")
-            st.download_button(
-                "🎙️ ⬇️ 음성 MP3 다운로드",
-                data=st.session_state["tts_bytes"],
-                file_name=f"{_tts_title}_voice.mp3",
-                mime="audio/mpeg",
-                type="primary",
-                use_container_width=True,
-                key="tts_dl"
-            )
-        else:
-            st.info("음성 없음 (슈퍼톤 API 키 입력시 자동 생성)")
-
-    st.caption("⚠️ 새로고침하면 사라져요 — 지금 바로 받으세요!")
-    if st.button("✅ 받았어요", key="zip_confirm", use_container_width=False):
-        st.session_state["auto_zip_ready"] = False
-        st.session_state["auto_zip_data"]  = None
-        st.session_state["tts_bytes"]      = None
-        st.rerun()
-    st.markdown("---")
 
 # ══════════════════════════════════════════════════════════════
 # 결과 출력
@@ -1112,8 +923,21 @@ if st.session_state.step >= 1 and cuts:
             label = f"{'🎬' if sec=='intro' else '📖'} SCENE {i+1}"
             st.markdown(f'<div class="scene-card"><div class="scene-header"><span>{label}</span><span class="{badge}-badge">{"인트로" if sec=="intro" else "본문"}</span></div><div class="scene-script">{cut}</div></div>', unsafe_allow_html=True)
 
-    # 이미지 결과
-    if st.session_state.step >= 3:
+    # 프롬프트만 생성된 상태 (step==2, 이미지 없음)
+    if st.session_state.step == 2 and any(p is not None for p in prompts):
+        st.info("📝 프롬프트 생성 완료 — 이미지 없음. '⚡ 일괄 생성'으로 이미지도 만들 수 있어요.")
+        n_intro = sum(1 for s in sections if s=="intro")
+        for i, (cut, sec) in enumerate(zip(cuts, sections)):
+            badge_cls  = "intro-badge" if sec=="intro" else "body-badge"
+            badge_text = "인트로" if sec=="intro" else "본문"
+            with st.expander(f"SCENE {i+1} · {badge_text} · {cut[:30]}..."):
+                st.markdown(f'<span class="{badge_cls}">{badge_text}</span>', unsafe_allow_html=True)
+                st.markdown(f"**대본:** {cut}")
+                if scenes[i]:
+                    st.markdown(f"**장면 해석:** {scenes[i]}")
+                if prompts[i]:
+                    st.code(prompts[i], language="text")
+        st.markdown("---")
         ok = sum(1 for img in images if img is not None)
         st.success(f"✅ {ok}/{len(cuts)}개 생성 완료")
 
@@ -1187,7 +1011,9 @@ if st.session_state.step >= 1 and cuts:
 
             st.markdown("---")
 
-
+# ══════════════════════════════════════════════════════════════
+# 라이브러리 (localStorage)
+# ══════════════════════════════════════════════════════════════
 if st.session_state.step >= 3 and cuts:
     st.markdown("---")
     st.markdown("### 💾 라이브러리에 저장")
@@ -1296,21 +1122,3 @@ st.components.v1.html("""
 })();
 </script>
 """, height=380, scrolling=True)
-
-if st.session_state.step == 0:
-    st.markdown("---")
-    st.info("👈 사이드바에서 설정 후, 대본을 입력하고 **⚡ 일괄 생성**을 눌러주세요.")
-    with st.expander("📌 동작 방식"):
-        st.markdown("""
-**4단계 자동 파이프라인:**
-
-1. **대본 분석** — Gemini가 전체 주제와 핵심 장면 키워드 파악
-2. **초단위 분할** — 컷당 시간 기준(한국어 4.5자/초)으로 대본을 컷별로 나눔
-3. **프롬프트 생성** — 각 컷의 내용을 스틱맨 스타일 영문 이미지 프롬프트로 변환
-   - 대본 내용이 구체적으로 반영됨 (행동, 감정, 개념 → 시각적 묘사)
-4. **이미지 생성** — 생성된 프롬프트로 실제 이미지 생성
-
-**모델:**
-- 🧠 프롬프트 생성: `gemini-2.5-flash`
-- 🎨 이미지 생성: `gemini-3.1-flash-image-preview` (Nano Banana 2 🍌)
-        """)
