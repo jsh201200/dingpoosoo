@@ -4,8 +4,6 @@ from google.genai import types
 import base64, io, re, time, json, datetime, zipfile
 from PIL import Image
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
-# ── 페이지 설정 ────────────────────────────────────────────────
 st.set_page_config(page_title="딩푸수 메이커", page_icon="🎬", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
@@ -948,8 +946,7 @@ if st.session_state.step >= 1 and cuts:
 
         # ZIP 다운로드
         _zip_title = project_title.strip() or (cuts[0][:20].strip() if cuts else "딩푸수메이커")
-        import re as _re
-        _safe_title = _re.sub(r'[\\/*?:"<>|]', '', _zip_title).strip()[:30]
+        _safe_title = re.sub(r'[\\/*?:"<>|]', '', _zip_title).strip()[:30]
         _zip_filename = f"{_safe_title}.zip" if _safe_title else "딩푸수메이커.zip"
         zip_buf = io.BytesIO()
         with zipfile.ZipFile(zip_buf, "w") as zf:
@@ -967,7 +964,9 @@ if st.session_state.step >= 1 and cuts:
             st.markdown("### 🎬 인트로")
 
         for i, (cut, sec) in enumerate(zip(cuts, sections)):
-            if sec == "body" and i == n_intro and n_intro > 0:
+            if sec == "body" and (i == 0 or sections[i-1] == "intro") and n_intro > 0:
+                st.markdown("### 📖 본문")
+            elif sec == "body" and n_intro == 0 and i == 0:
                 st.markdown("### 📖 본문")
 
             badge_cls  = "intro-badge" if sec=="intro" else "body-badge"
@@ -977,9 +976,10 @@ if st.session_state.step >= 1 and cuts:
             col_img, col_info = st.columns([1, 1.3])
 
             with col_img:
-                if images[i]:
-                    st.image(images[i], use_container_width=True)
-                    buf = io.BytesIO(); images[i].save(buf, format="PNG")
+                img_safe = images[i] if i < len(images) else None
+                if img_safe:
+                    st.image(img_safe, use_container_width=True)
+                    buf = io.BytesIO(); img_safe.save(buf, format="PNG")
                     st.download_button(f"⬇️ 다운로드", buf.getvalue(),
                                        f"scene_{i+1:02d}.png", "image/png",
                                        key=f"dl_{i}", use_container_width=True)
@@ -991,10 +991,10 @@ if st.session_state.step >= 1 and cuts:
                 st.markdown("📄 **SCRIPT**")
                 st.markdown(f'<div class="scene-script">{cut}</div>', unsafe_allow_html=True)
 
-                if scenes[i]:
+                if scenes and i < len(scenes) and scenes[i]:
                     with st.expander("🎬 장면 해석"):
                         st.write(scenes[i])
-                if prompts[i]:
+                if prompts and i < len(prompts) and prompts[i]:
                     with st.expander("🔍 프롬프트"):
                         st.code(prompts[i], language="text")
 
