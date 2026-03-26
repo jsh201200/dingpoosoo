@@ -926,7 +926,6 @@ if st.session_state.step >= 1 and cuts:
     # 프롬프트만 생성된 상태 (step==2, 이미지 없음)
     if st.session_state.step == 2 and any(p is not None for p in prompts):
         st.info("📝 프롬프트 생성 완료 — 이미지 없음. '⚡ 일괄 생성'으로 이미지도 만들 수 있어요.")
-        n_intro = sum(1 for s in sections if s=="intro")
         for i, (cut, sec) in enumerate(zip(cuts, sections)):
             badge_cls  = "intro-badge" if sec=="intro" else "body-badge"
             badge_text = "인트로" if sec=="intro" else "본문"
@@ -937,7 +936,9 @@ if st.session_state.step >= 1 and cuts:
                     st.markdown(f"**장면 해석:** {scenes[i]}")
                 if prompts[i]:
                     st.code(prompts[i], language="text")
-        st.markdown("---")
+
+    # 이미지 결과 (step==3)
+    if st.session_state.step >= 3:
         ok = sum(1 for img in images if img is not None)
         st.success(f"✅ {ok}/{len(cuts)}개 생성 완료")
 
@@ -945,19 +946,13 @@ if st.session_state.step >= 1 and cuts:
             with st.expander(f"⚠️ 오류 {len(st.session_state.errors)}건"):
                 for e in st.session_state.errors: st.caption(e)
 
-        # ZIP 파일명 — 프로젝트 제목 or 인트로 첫 문장 자동 사용
-        _zip_title = (
-            project_title.strip()
-            or (cuts[0][:20].strip() if cuts else "딩푸수메이커")
-        )
-        # 파일명에 쓸 수 없는 문자 제거
+        # ZIP 다운로드
+        _zip_title = project_title.strip() or (cuts[0][:20].strip() if cuts else "딩푸수메이커")
         import re as _re
         _safe_title = _re.sub(r'[\\/*?:"<>|]', '', _zip_title).strip()[:30]
         _zip_filename = f"{_safe_title}.zip" if _safe_title else "딩푸수메이커.zip"
-
-        # ZIP 다운로드
         zip_buf = io.BytesIO()
-        with zipfile.ZipFile(zip_buf,"w") as zf:
+        with zipfile.ZipFile(zip_buf, "w") as zf:
             for i, img in enumerate(images):
                 if img:
                     b = io.BytesIO(); img.save(b, format="PNG")
@@ -965,10 +960,8 @@ if st.session_state.step >= 1 and cuts:
         st.download_button("📦 생성된 모든 이미지 .ZIP 다운로드",
                            zip_buf.getvalue(), _zip_filename,
                            "application/zip", type="primary", use_container_width=True)
-
         st.markdown("---")
 
-        # 씬 카드 목록
         n_intro = sum(1 for s in sections if s=="intro")
         if n_intro > 0:
             st.markdown("### 🎬 인트로")
